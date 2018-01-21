@@ -1,0 +1,5 @@
+name: stlc
+include:
+    ./src/
+depend:
+    agda-prelude
