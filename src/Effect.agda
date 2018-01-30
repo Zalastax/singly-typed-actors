@@ -1,8 +1,5 @@
 module Effect where
 
-open import Data.String
-open import Data.Bool
-open import Data.Unit
 open import Data.List
 open import Data.List.All
 open import Data.List.Any
@@ -31,9 +28,6 @@ record EFFECT : Set₁ where
   constructor mkEff
   field S : Set
         E : Effect S
-
-data FileIOState : Set where
-  opened closed : FileIOState
 
 State : List EFFECT → Set₁
 State = All EFFECT.S
@@ -74,28 +68,6 @@ f <$> m = m >>= λ x → return (f x)
 _<$_ : ∀ {M E i A B o} → B → ⟨ M ⟩Eff E [ _ ∶ A ] i ==> o → ⟨ M ⟩Eff E [ _ ∶ B ] i ==> o
 x <$ m = (λ _ → x) <$> m
 
-data FileIOEff : Effect FileIOState where
-  `openFile  : String → FileIOEff Bool closed (λ ok → if ok then opened else closed)
-  `closeFile : FileIOEff ⊤ opened (λ _ → closed)
-
-FileIO : EFFECT
-FileIO = mkEff FileIOState FileIOEff
-
-openFile : ∀ {M Es i} (mem : FileIO ∈ Es) → lookup i mem ≡ closed → String →
-           ⟨ M ⟩Eff Es [ ok ∶ Bool ] i ==> set i mem (if ok then opened else closed)
-openFile mem prf file = effect mem prf (`openFile file)
-
-closeFile : ∀ {M Es i} (mem : FileIO ∈ Es) → lookup i mem ≡ opened →
-            ⟨ M ⟩Eff Es [ _ ∶ ⊤ ] i ==> set i mem closed
-closeFile mem prf = effect mem prf `closeFile
-
-openAndClose : ∀ {M} → String → ⟨ M ⟩Eff (FileIO ∷ []) [ _ ∶ ⊤ ] (closed ∷ []) ==> (closed ∷ [])
-openAndClose file =
-  openFile (here refl) refl file >>= λ
-  { true  → closeFile (here refl) refl
-  ; false → return _
-  }
-
 module _ {M : Set → Set} (Mon : RawMonad M) where
   module M = RawMonad Mon
 
@@ -105,19 +77,3 @@ module _ {M : Set → Set} (Mon : RawMonad M) where
   run env (effect mem _ e) = lookup env mem e
   run env (lift inc m) = run (extract env inc) m
   run env (new eval m) = run (eval ∷ env) m
-
-{-
-postulate
-  IO       : Set → Set
-  returnIO : ∀ {A} → A → IO A
-  bindIO   : ∀ {A B} → IO A → (A → IO B) → IO B
-
-{-# BUILTIN IO IO #-}
-{-# COMPILE GHC IO = type IO #-}
-{-# COMPILE GHC returnIO = (\_ -> return) #-}
-{-# COMPILE GHC bindIO = (\_ _ -> (>>=)) #-}
-
-IOMonad : RawMonad IO
-IOMonad = record { return = returnIO ; _>>=_ = bindIO }
--}
-
