@@ -31,17 +31,6 @@ record EFFECT (f : Level) : Set (suc f) where
   field S : Set f
         E : Effect f
 
--- State : List EFFECT → Set₁
--- State = All EFFECT.S
-
-embed : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys : List A} → All P ys → xs ⊆ ys → All P xs → All P ys
-embed pys        []         pxs        = pys
-embed (_ ∷ pys)  (keep inc) (px ∷ pxs) = px ∷ embed pys inc pxs
-embed (py ∷ pys) (skip inc) pxs        = py ∷ embed pys inc pxs
-
-set : ∀ {a p} {A : Set a} {P : A → Set p} {xs : List A} {x} → All P xs → x ∈ xs → P x → All P xs
-set ps inc px = embed ps (singleton-⊆ inc) (px ∷ [])
-
 updateResTy : ∀ {f A E i o} → (val : A) →
               (es : List (EFFECT f)) →
               (prf : (mkEff i E) ∈ es) →
@@ -56,13 +45,6 @@ updateWith [] xs inc = xs
 updateWith (y' ∷ ys') xs [] = xs
 updateWith (y' ∷ ys') (_ ∷ xs) (keep inc) = y' ∷ updateWith ys' xs inc
 updateWith (y' ∷ ys') (x ∷ xs) (skip inc) = x ∷ updateWith (y' ∷ ys') xs inc
-
-extract : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys : List A} → All P ys → xs ⊆ ys → All P xs
-extract _          []       = []
-extract (p ∷ ps) (keep inc) = p ∷ extract ps inc
-extract (_ ∷ ps) (skip inc) = extract ps inc
-
--- syntax EffM M E A i (λ x → o) = ⟨ M ⟩Eff[ x ∶ A ] i ==> o
 
 Handler : ∀ {f} → (Set f → Set f) → Effect f → Set (suc f)
 Handler M e = ∀ {A a o res} → (r : res) → (eff : e A res o) →
@@ -90,13 +72,18 @@ data EffM {f : Level} (m : Set f → Set f) : (A : Set f) →
     EffM {f} m A (e ∷ es) (λ v → e ∷ es) →
     EffM m A es (λ v → es)
 
--- _<$>_ : ∀ {M E i A B o} → (A → B) → ⟨ M ⟩Eff E [ _ ∶ A ] i ==> o → ⟨ M ⟩Eff E [ _ ∶ B ] i ==> o
--- f <$> m = m >>= λ x → return (f x)
+pure : ∀ {l m A es} → A → EffM {l} m A es (λ v → es)
+pure = return
 
--- _<$_ : ∀ {M E i A B o} → B → ⟨ M ⟩Eff E [ _ ∶ A ] i ==> o → ⟨ M ⟩Eff E [ _ ∶ B ] i ==> o
--- x <$ m = (λ _ → x) <$> m
+_<*>_ : ∀ {l m A B es} → EffM {l} m (A → B) es (λ v → es) →
+                    EffM {l} m A es (λ v → es) →
+                    EffM {l} m B es (λ v → es)
+_<*>_ prog v = prog >>= λ fn →
+               v >>= λ arg →
+               pure (fn arg)
 
--- postulate eta-contraction : {A : Set} → {f : A → Set} → {v : A} → (B : f v) → Set
+_<$>_ : ∀ {l m A B es} → (f : A → B) → EffM {l} m A es (λ v → es) → EffM {l} m B es (λ v → es)
+_<$>_ f m = pure f <*> m
 
 data Env {f : Level} : (m : Set f → Set f) → List (EFFECT f) → Set (suc f) where
   [] : ∀ {m} → Env m []
@@ -142,18 +129,4 @@ eff {f} {m} {es} {A} {B} env (new e val handler effM) k = eff ((handler , val) �
 
 run : ∀ {f a xs xs'} → ∀ m → (mon : RawMonad m) → (prog : EffM {f} m a xs xs') → Env m xs → m a
 run m mon prog env = eff env prog λ r → λ env' → RawMonad.return mon r
-
--- module _ {M : Set → Set} (Mon : RawMonad M) where
---   module M = RawMonad Mon
-
---  runEnv : ∀ {A xs'} → {m : ∀ {f} → (Set f → Set f)} → ∀ {xs} → Env {zero} (m {zero}) xs → EffM (m {zero}) A xs xs' →
---           m {suc zero} (Σ A λ a → Env m (xs' a))
---  runEnv env prog = eff env prog ? -- {!env!} {!prog!} {!!}
-   -- eff = ?
-  -- run : ∀ {Es A i o} → All (Handler M) Es → EffM M A i o → M A
-  -- run env (return x) = M.return x
-  -- run env (m >>= f) = run env m M.>>= λ x → run env (f x)
-  -- run env (effect prf eff) = execEff env prf eff
-  -- run env (lift inc m) = run (extract env inc) m
-  -- run env (new eval m) = run (eval ∷ env) m
 
