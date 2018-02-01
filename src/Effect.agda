@@ -23,6 +23,10 @@ singleton-⊆ : ∀ {a} {A : Set a} {x : A} {xs : List A} → x ∈ xs → [ x ]
 singleton-⊆ (here refl) = keep []
 singleton-⊆ (there mem) = skip (singleton-⊆ mem)
 
+reflexive-⊆ : ∀ {a} {A : Set a} {xs : List A} → xs ⊆ xs
+reflexive-⊆ {xs = []} = []
+reflexive-⊆ {xs = x ∷ xs} = keep reflexive-⊆
+
 Effect : ∀ f → Set (suc f)
 Effect f = (result : Set f) (i : Set f) (o : result → Set f) → Set f
 
