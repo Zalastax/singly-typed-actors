@@ -50,9 +50,9 @@ pingMainActor A = ActorM Pingbox A pingrefs constPingrefs
 
 mutual
   pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (addIfRef pingrefs msg) constPingrefs)
-  pingReceive (MsgV (Value (here refl) b)) = return b
-  pingReceive (MsgV (Value (there ()) _))
-  pingReceive (MsgR x) = ♯ ALift (skip reflexive-⊆) loopTillPingValue
+  pingReceive (Value (here refl) b) = return b
+  pingReceive (Value (there ()) _)
+  pingReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPingValue
 
   loopTillPingValue : ∞ (pingMainActor (Lift Bool))
   loopTillPingValue = ♯ (receive >>= pingReceive)
@@ -62,9 +62,9 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
   where
     loopTillPong : ∞ (ActorM Pingbox ⊤₁ [] constPingrefs)
     loopTillPong = ♯ (receive >>= ((λ
-      { (MsgV _) → loopTillPong
-      ; (MsgR (Reference (here refl))) → return _
-      ; (MsgR (Reference (there ()))) })))
+      { (Value _ _) → loopTillPong
+      ; (Reference (here refl)) → return _
+      ; (Reference (there ())) })))
     pingMain : ℕ → ∞ (pingMainActor ⊤₁)
     pingMain n = ♯ ((loopTillPingValue >>= λ
       { (lift false) → ♯ ( (here refl !v Value (here refl) n) >>= λ _ → pingMain (suc n))
@@ -81,9 +81,9 @@ pongMainActor A = ActorM Pongbox A pongrefs constPongrefs
 
 mutual
   pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (addIfRef pongrefs msg) constPongrefs)
-  pongReceive (MsgV (Value (here refl) n)) = return n
-  pongReceive (MsgV (Value (there ()) _))
-  pongReceive (MsgR x) = ♯ ALift (skip reflexive-⊆) loopTillPongValue
+  pongReceive (Value (here refl) n) = return n
+  pongReceive (Value (there ()) _)
+  pongReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPongValue
 
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
   loopTillPongValue = ♯ (receive >>= pongReceive)
@@ -93,9 +93,9 @@ ponger = loopTillPing >>= λ _ → ♯ ((here refl !v Value (here refl) false) >
   where
     loopTillPing : ∞ (ActorM Pongbox ⊤₁ [] constPongrefs)
     loopTillPing = ♯ (receive >>= λ
-      { (MsgV _) → loopTillPing
-      ; (MsgR (Reference (here refl))) → return _
-      ; (MsgR (Reference (there ())))})
+      { (Value _ _) → loopTillPing
+      ; (Reference (here refl)) → return _
+      ; (Reference (there ()))})
     pongMain : ∞ (pongMainActor ⊤₁)
     pongMain = ♯ (loopTillPongValue >>= λ
       { (lift 10) → ♯ (here refl !v Value (here refl) true >>= λ _ → return _)

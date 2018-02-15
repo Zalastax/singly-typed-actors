@@ -1,4 +1,5 @@
 module SimulationEnvironment where
+open import Membership-equality using (_∈_)
 open import ActorMonad
 
 open import Data.List using (List ; _∷_ ; [] ; map)
@@ -47,8 +48,8 @@ record Actor : Set₂ where
     name : Name
 
 data NamedMessage (S : InboxShape): Set₁ where
-  MsgV : ValueMessage S → NamedMessage S
-  MsgR : ∀ {Fw} → ReferenceMessage S Fw → Name → NamedMessage S
+  Value : ∀ {A} → A ∈ InboxShape.Values S → A → NamedMessage S
+  Reference : ∀ {Fw} → Fw ∈ InboxShape.References S → Name → NamedMessage S
 
 -- A list of messages, wrapped up with the shape of the messages
 -- Each inbox is given a name, matching those for actors
@@ -80,8 +81,8 @@ inboxRightPointer : Store → Inbox → Set
 inboxRightPointer store inb = Inbox.name inb ↦ Inbox.IS inb ∈e store
 
 messageValid : ∀ {IS} → Store → NamedMessage IS → Set
-messageValid store (MsgV x) = ⊤
-messageValid store (MsgR {Fw} x name) = name ↦ Fw ∈e store
+messageValid store (Value _ _) = ⊤
+messageValid store (Reference {Fw} _ name) = name ↦ Fw ∈e store
 
 allMessagesValid : Store → Inbox → Set₁
 allMessagesValid store inb = All (messageValid store) (Inbox.inb inb)

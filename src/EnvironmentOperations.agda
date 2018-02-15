@@ -111,8 +111,8 @@ messagesValidSuc {store} {inb} {n} {x} frsh vi = ∀map msgValidSuc vi
   where
     msgValidSuc : {x₁ : NamedMessage (Inbox.IS inb)} →
                   messageValid store x₁ → messageValid ((n , x) ∷ store) x₁
-    msgValidSuc {x₁ = MsgV x₁} mv = tt
-    msgValidSuc {x₁ = MsgR x₁ x₂} mv = suc {pr = sucHelper mv frsh} mv
+    msgValidSuc {x₁ = Value _ _} mv = tt
+    msgValidSuc {x₁ = Reference _ _} mv = suc {pr = sucHelper mv frsh} mv
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.

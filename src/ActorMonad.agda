@@ -1,10 +1,12 @@
 module ActorMonad where
-open import Data.List using (List ; [] ; _∷_)
 open import Membership-equality using (_∈_)
+open import Sublist using (_⊆_)
+
+open import Data.List using (List ; [] ; _∷_)
+open import Data.Unit using (⊤ ; tt)
+
 open import Coinduction using (∞ ; ♯_)
 open import Level using (Lift ; lift ; suc ; zero)
-open import Data.Unit using (⊤ ; tt)
-open import Sublist using (_⊆_)
 
 -- An Actor is indexed by the shape of its inbox.
 -- The shape is constant over the actors whole life-time
@@ -29,8 +31,8 @@ data ReferenceMessage (S Fw : InboxShape) : Set₁ where
 
 -- A Message is either a value or a reference
 data Message (S : InboxShape): Set₁ where
-  MsgV : ValueMessage S → Message S
-  MsgR : ∀ {Fw} → ReferenceMessage S Fw → Message S
+  Value : ∀ {A} → A ∈ InboxShape.Values S → A → Message S
+  Reference : ∀ {Fw} → Fw ∈ InboxShape.References S → Message S
 
 -- Simple lifting of ⊤ to reduce noise when the monad returns ⊤
 ⊤₁ : Set₁
@@ -38,8 +40,8 @@ data Message (S : InboxShape): Set₁ where
 
 -- When a message is received, we increase our capabilities iff the message is a reference
 addIfRef : ∀ {S} → List InboxShape → Message S → List InboxShape
-addIfRef es (MsgV x) = es
-addIfRef es (MsgR {Fw} x) = Fw ∷ es
+addIfRef es (Value _ _) = es
+addIfRef es (Reference {Fw} _) = Fw ∷ es
 
 infixl 1 _>>=_
 

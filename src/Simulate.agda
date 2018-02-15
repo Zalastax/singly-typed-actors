@@ -13,7 +13,7 @@ open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong)
 
 open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
 open import Coinduction using (∞ ; ♯_ ; ♭)
@@ -46,9 +46,6 @@ private
 open Actor
 open ValidActor
 open Env
-
-∷-refl : ∀ {ls ls'} → ∀ x → ls ≡ ls' → x ∷ ls ≡ x ∷ ls'
-∷-refl x refl = refl
 
 simulate : Env → Colist EnvStep
 simulate env with (acts env) | (actorsValid env)
@@ -153,7 +150,7 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
                 ; A = A
                 ; references = newStoreEntry ∷ references
                 ; es = NewIS ∷ es
-                ; esEqRefs = ∷-refl NewIS esEqRefs
+                ; esEqRefs = cong (_∷_ NewIS) esEqRefs
                 ; ce = ce
                 ; act = ♭ (f _)
                 ; name = name
@@ -181,7 +178,7 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
              }
 -- ===== Bind send value =====
 simulate env | record { IS = IS ; A = A ; references = references ; es = es ; esEqRefs = esEqRefs ; ce = ce ; act = act ; name = name } ∷ rest | valid ∷ restValid | m >>= f |
-  SendValue {ToIS = ToIS} canSendTo msg = keepSimulating (Bind (SendValue name toName)) withUnblocked
+  SendValue {ToIS = ToIS} canSendTo (Value x a) = keepSimulating (Bind (SendValue name toName)) withUnblocked
   where
     toLookedUp : Σ[ name ∈ Name ] name ↦ ToIS ∈e (store env)
     toLookedUp = lookupReference valid canSendTo
@@ -217,14 +214,14 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
               }
     addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
               Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (MsgV msg ∷ messages) , tt ∷ allValid
+    addMsg (messages , allValid) = (Value x a ∷ messages) , tt ∷ allValid
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv withM toRef addMsg
     withUnblocked : Env
     withUnblocked = unblockActor withUpdatedInbox toName
 -- ===== Bind send reference =====
 simulate env | record { IS = IS ; A = A ; references = references ; es = es ; esEqRefs = esEqRefs ; ce = ce ; act = act ; name = name } ∷ rest | valid ∷ restValid | m >>= f |
-  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward msg = keepSimulating (Bind (SendReference name toName fwName)) withUnblocked
+  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keepSimulating (Bind (SendReference name toName fwName)) withUnblocked
   where
     toLookedUp : Σ[ name ∈ Name ] name ↦ ToIS ∈e (store env)
     toLookedUp = lookupReference valid canSendTo
@@ -266,7 +263,7 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
               }
     addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
               Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (MsgR msg fwName ∷ messages) , (fwRef ∷ allValid)
+    addMsg (messages , allValid) = (Reference x fwName ∷ messages) , (fwRef ∷ allValid)
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv withM toRef addMsg
     withUnblocked : Env
@@ -289,8 +286,8 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
     sameStoreAfter rewrite (sym (Σ.proj₂ (Σ.proj₂ inboxesAfter))) = Env.inbs=store env
     receiveKind : List (NamedMessage IS) → ReceiveKind
     receiveKind [] = Nothing
-    receiveKind (MsgV x ∷ ls) = Value
-    receiveKind (MsgR x x₁ ∷ ls) = Reference x₁
+    receiveKind (Value _ _ ∷ ls) = Value
+    receiveKind (Reference _ refName ∷ ls) = Reference refName
     env' : Σ[ ls ∈ List (NamedMessage IS) ] All (messageValid (Env.store env)) ls → Env
     env' ([] , proj₂) = record
                           { acts = rest
@@ -313,7 +310,7 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
                           ; messagesValid = Env.messagesValid env
                           ; nameIsFresh = Env.nameIsFresh env
                           }
-    env' (MsgV x ∷ proj₁ , proj₂) = record
+    env' (Value x a ∷ proj₁ , proj₂) = record
                                       { acts = record
                                                  { IS = IS
                                                  ; A = A
@@ -321,7 +318,7 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
                                                  ; es = es
                                                  ; esEqRefs = esEqRefs
                                                  ; ce = ce
-                                                 ; act = ♭ (f (MsgV x))
+                                                 ; act = ♭ (f (Value x a))
                                                  ; name = name
                                                  } ∷ rest
                                       ; blocked = Env.blocked env
@@ -334,15 +331,15 @@ simulate env | record { IS = IS ; A = A ; references = references ; es = es ; es
                                       ; messagesValid = Σ.proj₁ (Σ.proj₂ inboxesAfter)
                                       ; nameIsFresh = Env.nameIsFresh env
                                       }
-    env' (MsgR {Fw} x x₁ ∷ proj₁ , px ∷ proj₂) = record
+    env' (Reference {Fw} x fwName ∷ proj₁ , px ∷ proj₂) = record
                                          { acts = record
                                                     { IS = IS
                                                     ; A = A
-                                                    ; references = (x₁ , Fw) ∷ references
+                                                    ; references = (fwName , Fw) ∷ references
                                                     ; es = Fw ∷ es
-                                                    ; esEqRefs = ∷-refl Fw esEqRefs
+                                                    ; esEqRefs = cong (_∷_ Fw) esEqRefs
                                                     ; ce = ce
-                                                    ; act = ♭ (f (MsgR x))
+                                                    ; act = ♭ (f (Reference x))
                                                     ; name = name
                                                     } ∷ rest
                                          ; blocked = Env.blocked env
@@ -426,7 +423,7 @@ simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es
   Spawn act₁ = keepSimulating (Spawn name (freshName env)) (addTop act₁ (dropTop env))
 -- ===== Send value =====
 simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es = es ; esEqRefs = esEqRefs ; ce = .(λ _ → es) ; act = act ; name = name } ∷ rest | valid ∷ restValid |
-  SendValue {ToIS = ToIS} canSendTo msg = keepSimulating (SendValue name toName) withUnblocked
+  SendValue {ToIS = ToIS} canSendTo (Value x a ) = keepSimulating (SendValue name toName) withUnblocked
   where
     toLookedUp : Σ[ name ∈ Name ] name ↦ ToIS ∈e (store env)
     toLookedUp = lookupReference valid canSendTo
@@ -436,7 +433,7 @@ simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es
     toRef = Σ.proj₂ toLookedUp
     addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
       Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (MsgV msg ∷ messages) , tt ∷ allValid
+    addMsg (messages , allValid) = (Value x a ∷ messages) , tt ∷ allValid
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv env toRef addMsg
     withTopDropped : Env
@@ -445,7 +442,7 @@ simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es
     withUnblocked = unblockActor withTopDropped toName
 -- ===== Send reference =====
 simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es = es ; esEqRefs = esEqRefs ; ce = .(λ _ → es) ; act = act ; name = name } ∷ rest | valid ∷ restValid |
-  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward msg = keepSimulating (SendReference name toName fwName) withUnblocked
+  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keepSimulating (SendReference name toName fwName) withUnblocked
   where
     toLookedUp : Σ[ name ∈ Name ] name ↦ ToIS ∈e (store env)
     toLookedUp = lookupReference valid canSendTo
@@ -461,7 +458,7 @@ simulate env | record { IS = IS ; A = .(Lift ⊤) ; references = references ; es
     fwRef = Σ.proj₂ fwLookedUp
     addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
       Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (MsgR msg fwName ∷ messages) , fwRef ∷ allValid
+    addMsg (messages , allValid) = (Reference x fwName ∷ messages) , fwRef ∷ allValid
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv env toRef addMsg
     withTopDropped : Env
