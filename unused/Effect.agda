@@ -9,6 +9,7 @@ open import Function
 open import Category.Monad
 open import Data.Product
 open import EffectUtil
+open import Membership-equality hiding (_⊆_; set)
 
 Effect : ∀ f → Set (suc f)
 Effect f = (result : Set f) (i : Set f) (o : result → Set f) → Set f
@@ -84,7 +85,7 @@ execEff : ∀ {f m A es E i} {o : A → Set f} {B} →
 execEff {m = m} {A = A} {o = o} {B = B} ((handle , val) ∷ env) (here refl) eff k = handle val eff cont
   where
     cont : (v : A) → o v → m B
-    cont v res = k v ((handle , res) ∷ env) -- TODO: Make res eta-contract
+    cont v res = k v ((handle , res) ∷ env)
 execEff (e ∷ env) (there prf) eff k = execEff env prf eff λ v → λ env' → k v (e ∷ env')
 
 dropEnv : ∀ {f m ys xs} → Env {f} m ys → xs ⊆ ys → Env m xs

@@ -1,4 +1,4 @@
-module Membership-≡ where
+module Membership-equality where
 
 import Membership
 open import Relation.Binary.PropositionalEquality as PropEq

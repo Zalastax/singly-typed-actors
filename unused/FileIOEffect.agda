@@ -11,7 +11,7 @@ open import Data.List using (List ; _∷_ ; [])
 open import Data.List.All using (All ; lookup ; _∷_ ; [])
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Membership-≡ using (_∈_)
+open import Membership-equality using (_∈_)
 open import Data.Product using (Σ ; _,_ ; _×_)
 
 data FileIOState : Set where

@@ -1,0 +1,7 @@
+name: unused
+include:
+    ../src/
+    ./unused/
+depend:
+    agda-prelude -- on commit 7a4160fc7a1ee07b09afc2c68d27b58ce0b9962a
+    standard-library

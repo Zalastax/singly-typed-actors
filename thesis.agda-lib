@@ -1,6 +1,5 @@
-name: stlc
+name: thesis
 include:
     ./src/
 depend:
-    agda-prelude
     standard-library
