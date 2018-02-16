@@ -134,10 +134,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindActValid = record { hasInb = hasInb valid ; points = points valid }
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
-    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
-    addMsg vml = record { inbox = Value x a ∷ inbox vml ; valid = tt ∷ ValidMessageList.valid vml }
     withUpdatedInbox : Env
-    withUpdatedInbox = updateInboxEnv withM (reference foundTo) addMsg
+    withUpdatedInbox = updateInboxEnv withM (reference foundTo) (add-message (Value x a) _)
     withUnblocked : Env
     withUnblocked = unblockActor withUpdatedInbox (name foundTo)
 -- ===== Bind send reference =====
@@ -154,10 +152,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindActValid = record { hasInb = hasInb valid ; points = points valid }
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
-    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
-    addMsg vml = record { inbox = Reference x (name foundFw) ∷ inbox vml ; valid = reference foundFw ∷ ValidMessageList.valid vml} -- TODO: fix naming?
     withUpdatedInbox : Env
-    withUpdatedInbox = updateInboxEnv withM (reference foundTo) addMsg
+    withUpdatedInbox = updateInboxEnv withM (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
     withUnblocked : Env
     withUnblocked = unblockActor withUpdatedInbox (name foundTo)
 -- ===== Bind receive =====
@@ -168,16 +164,15 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     mInb = getInbox env (hasInb valid)
     myPoint : (inboxesToStore (inbs env) ≡ store env) → (name actor) ↦ (IS actor) ∈e inboxesToStore (inbs env)
     myPoint refl = hasInb valid
-    removeMsg : ValidMessageList (store env) (IS actor) → ValidMessageList (store env) (IS actor)
-    removeMsg record { inbox = [] ; valid = valid } = record { inbox = [] ; valid = valid }
-    removeMsg record { inbox = (x ∷ inbox) ; valid = (px ∷ valid) } = record { inbox = inbox ; valid = valid }
-    inboxesAfter = update-inboxes {name actor} {IS actor} (store env) (inbs env) (messagesValid env) (myPoint (sym (inbs=store env))) removeMsg
+    inboxesAfter = update-inboxes {name actor} {IS actor} (store env) (inbs env) (messagesValid env) (myPoint (sym (inbs=store env))) remove-message
     receiveKind : List (NamedMessage (IS actor)) → ReceiveKind
     receiveKind [] = Nothing
     receiveKind (Value _ _ ∷ ls) = Value
     receiveKind (Reference _ refName ∷ ls) = Reference refName
     env' : Σ[ ls ∈ List (NamedMessage (IS actor)) ] All (messageValid (Env.store env)) ls → Env
+    -- If there are no messages in its mailbox, move it to the blocked list
     env' ([] , proj₂) = replace-actors+blocked env rest restValid (actor ∷ blocked env) (valid ∷ blockedValid env)
+    -- If the next message is a value, just apply the message to f
     env' (Value x a ∷ proj₁ , proj₂) = record
                                       { acts = replace-actorM actor (♭ (f (Value x a)))∷ rest
                                       ; blocked = Env.blocked env
@@ -190,6 +185,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                       ; messagesValid = inboxes-valid inboxesAfter
                                       ; nameIsFresh = Env.nameIsFresh env
                                       }
+    -- If the next message is a reference, add the reference to the index, and apply the message to f
     env' (Reference {Fw} x fwName ∷ proj₁ , px ∷ proj₂) = record
                                          { acts = add-reference actor (fwName , Fw) (♭ (f (Reference x))) ∷ rest
                                          ; blocked = Env.blocked env
@@ -235,10 +231,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookupReference valid canSendTo
-    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
-    addMsg vml = record { inbox = Value x a ∷ inbox vml ; valid = tt ∷ (ValidMessageList.valid vml) }
     withUpdatedInbox : Env
-    withUpdatedInbox = updateInboxEnv env (reference foundTo) addMsg
+    withUpdatedInbox = updateInboxEnv env (reference foundTo) (add-message (Value x a) _)
     withTopDropped : Env
     withTopDropped = dropTop withUpdatedInbox
     withUnblocked : Env
@@ -251,10 +245,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
     foundTo = lookupReference valid canSendTo
     foundFw : FoundReference (store env) FwIS
     foundFw = lookupReference valid canForward
-    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
-    addMsg vml = record { inbox = Reference x (name foundFw) ∷ inbox vml ; valid = (reference foundFw) ∷ (ValidMessageList.valid vml) }
     withUpdatedInbox : Env
-    withUpdatedInbox = updateInboxEnv env (reference foundTo) addMsg
+    withUpdatedInbox = updateInboxEnv env (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
     withTopDropped : Env
     withTopDropped = dropTop withUpdatedInbox
     withUnblocked : Env

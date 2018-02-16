@@ -4,9 +4,9 @@ open import SimulationEnvironment
 open import Membership-equality using (_∈_)
 open import Sublist using (_⊆_ ; [] ; keep ; skip)
 
-open import Data.List using (List ; _∷_ ; [] ; map)
+open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
-open import Data.List.All.Properties using (++⁺)
+open import Data.List.All.Properties using (++⁺ ; drop⁺)
 open import Data.List.Any using (here ; there)
 open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_)
 open import Data.Nat.Properties using (≤-reflexive)
@@ -374,3 +374,8 @@ replace-actors+blocked env actors actorsValid blocked blockedValid = record {
   ; nameIsFresh = nameIsFresh env
   }
 
+add-message : {S : InboxShape} → {store : Store} → (message : NamedMessage S) → messageValid store message → (ValidMessageList store S → ValidMessageList store S)
+add-message message valid vml = record { inbox = inbox vml ++ (message ∷ []) ; valid = ++⁺ (ValidMessageList.valid vml) (valid ∷ []) }
+
+remove-message : {S : InboxShape} → {store : Store} → (ValidMessageList store S → ValidMessageList store S)
+remove-message vml = record { inbox = drop 1 (inbox vml) ; valid = drop⁺ 1 (ValidMessageList.valid vml) }
