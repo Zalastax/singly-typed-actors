@@ -13,7 +13,7 @@ open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
 
 open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
 open import Coinduction using (∞ ; ♯_ ; ♭)
@@ -47,6 +47,9 @@ open Actor
 open ValidActor
 open Env
 open FoundReference
+open LiftedReferences
+open UpdatedInboxes
+open ValidMessageList
 
 simulate : Env → Colist EnvStep
 simulate env with (acts env) | (actorsValid env)
@@ -89,16 +92,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     newInb : Inbox
     newInb = record { IS = NewIS ; inb = [] ; name = freshName env }
     newAct : Actor
-    newAct = record
-               { IS = NewIS
-               ; A = B
-               ; references = []
-               ; es = []
-               ; esEqRefs = refl
-               ; ce = ceN
-               ; act = bm
-               ; name = freshName env
-               }
+    newAct = new-actor bm (freshName env)
     newActValid : ValidActor newStore newAct
     newActValid = record { hasInb = zero ; points = [] }
     newIsFresh : NameFresh newStore (suc (freshName env))
@@ -140,9 +134,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindActValid = record { hasInb = hasInb valid ; points = points valid }
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
-    addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
-              Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (Value x a ∷ messages) , tt ∷ allValid
+    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
+    addMsg vml = record { inbox = Value x a ∷ inbox vml ; valid = tt ∷ ValidMessageList.valid vml }
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv withM (reference foundTo) addMsg
     withUnblocked : Env
@@ -161,9 +154,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindActValid = record { hasInb = hasInb valid ; points = points valid }
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
-    addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
-              Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (Reference x (name foundFw) ∷ messages) , ((reference foundFw) ∷ allValid)
+    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
+    addMsg vml = record { inbox = Reference x (name foundFw) ∷ inbox vml ; valid = reference foundFw ∷ ValidMessageList.valid vml} -- TODO: fix naming?
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv withM (reference foundTo) addMsg
     withUnblocked : Env
@@ -176,14 +168,10 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     mInb = getInbox env (hasInb valid)
     myPoint : (inboxesToStore (inbs env) ≡ store env) → (name actor) ↦ (IS actor) ∈e inboxesToStore (inbs env)
     myPoint refl = hasInb valid
-    removeMsg : Σ[ inLs ∈ List (NamedMessage (IS actor))] All (messageValid (store env)) inLs → Σ[ outLs ∈ List (NamedMessage (IS actor))] All (messageValid (store env)) outLs
-    removeMsg ([] , []) = [] , []
-    removeMsg (x ∷ inls , px ∷ prfs) = inls , prfs
-    inboxesAfter : Σ[ ls ∈ List Inbox ] All (allMessagesValid (store env)) ls × (inboxesToStore (inbs env) ≡ inboxesToStore ls)
-    inboxesAfter = updateInboxes {name actor} {IS actor} (store env) (inbs env) (messagesValid env) (myPoint (sym (inbs=store env))) removeMsg
-    -- I would like to not use rewrite, but I couldn't get something Agda liked working
-    sameStoreAfter : store env ≡ inboxesToStore (Σ.proj₁ inboxesAfter)
-    sameStoreAfter rewrite (sym (Σ.proj₂ (Σ.proj₂ inboxesAfter))) = Env.inbs=store env
+    removeMsg : ValidMessageList (store env) (IS actor) → ValidMessageList (store env) (IS actor)
+    removeMsg record { inbox = [] ; valid = valid } = record { inbox = [] ; valid = valid }
+    removeMsg record { inbox = (x ∷ inbox) ; valid = (px ∷ valid) } = record { inbox = inbox ; valid = valid }
+    inboxesAfter = update-inboxes {name actor} {IS actor} (store env) (inbs env) (messagesValid env) (myPoint (sym (inbs=store env))) removeMsg
     receiveKind : List (NamedMessage (IS actor)) → ReceiveKind
     receiveKind [] = Nothing
     receiveKind (Value _ _ ∷ ls) = Value
@@ -193,25 +181,25 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     env' (Value x a ∷ proj₁ , proj₂) = record
                                       { acts = replace-actorM actor (♭ (f (Value x a)))∷ rest
                                       ; blocked = Env.blocked env
-                                      ; inbs = Σ.proj₁ inboxesAfter
+                                      ; inbs = updated-inboxes inboxesAfter
                                       ; store = Env.store env
-                                      ; inbs=store = sameStoreAfter
+                                      ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
                                       ; freshName = Env.freshName env
                                       ; actorsValid = record { hasInb = hasInb valid ; points = points valid } ∷ restValid
                                       ; blockedValid = Env.blockedValid env
-                                      ; messagesValid = Σ.proj₁ (Σ.proj₂ inboxesAfter)
+                                      ; messagesValid = inboxes-valid inboxesAfter
                                       ; nameIsFresh = Env.nameIsFresh env
                                       }
     env' (Reference {Fw} x fwName ∷ proj₁ , px ∷ proj₂) = record
                                          { acts = add-reference actor (fwName , Fw) (♭ (f (Reference x))) ∷ rest
                                          ; blocked = Env.blocked env
-                                         ; inbs = Σ.proj₁ inboxesAfter
+                                         ; inbs = updated-inboxes inboxesAfter
                                          ; store = Env.store env
-                                         ; inbs=store = sameStoreAfter
+                                         ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
                                          ; freshName = Env.freshName env
                                          ; actorsValid = record { hasInb = hasInb valid ; points = px ∷ points valid } ∷ restValid
                                          ; blockedValid = Env.blockedValid env
-                                         ; messagesValid = Σ.proj₁ (Σ.proj₂ inboxesAfter)
+                                         ; messagesValid = inboxes-valid inboxesAfter
                                          ; nameIsFresh = Env.nameIsFresh env
                                          }
 -- ===== Bind lift =====
@@ -219,22 +207,13 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
   ALift {B} {esX} {ceX} inc x with (♭ x)
 ... | bx = keepSimulating (Bind (TLift (name actor))) env'
   where
-    liftedRefs = liftRefs inc (references actor) (esEqRefs actor)
-    liftedBx : ActorM (IS actor) B (map justInbox (Σ.proj₁ liftedRefs)) ceX
-    liftedBx rewrite (sym (Σ.proj₂ (Σ.proj₂ liftedRefs))) = bx
+    liftedRefs = lift-references inc (references actor) (esEqRefs actor)
+    liftedBx : ActorM (IS actor) B (map justInbox (contained liftedRefs)) ceX
+    liftedBx rewrite (sym (contained-eq-inboxes liftedRefs)) = bx
     bindAct : Actor
-    bindAct = record
-                { IS = IS actor
-                ; A = A actor
-                ; references = Σ.proj₁ liftedRefs
-                ; es = map justInbox (Σ.proj₁ liftedRefs)
-                ; esEqRefs = refl
-                ; ce = ce actor
-                ; act = ♯ liftedBx >>= f
-                ; name = name actor
-                }
+    bindAct = lift-actor actor (contained liftedRefs) refl (♯ liftedBx >>= f)
     bindActValid : ValidActor (store env) bindAct
-    bindActValid = record { hasInb = hasInb valid ; points = All-⊆ (Σ.proj₁ (Σ.proj₂ liftedRefs)) (points valid) }
+    bindActValid = record { hasInb = hasInb valid ; points = All-⊆ (subset liftedRefs) (points valid) }
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
 -- ===== Bind self =====
@@ -256,9 +235,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookupReference valid canSendTo
-    addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
-      Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (Value x a ∷ messages) , tt ∷ allValid
+    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
+    addMsg vml = record { inbox = Value x a ∷ inbox vml ; valid = tt ∷ (ValidMessageList.valid vml) }
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv env (reference foundTo) addMsg
     withTopDropped : Env
@@ -273,9 +251,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
     foundTo = lookupReference valid canSendTo
     foundFw : FoundReference (store env) FwIS
     foundFw = lookupReference valid canForward
-    addMsg : Σ (List (NamedMessage ToIS)) (All (messageValid (store env))) →
-      Σ (List (NamedMessage ToIS)) (All (messageValid (store env)))
-    addMsg (messages , allValid) = (Reference x (name foundFw) ∷ messages) , (reference foundFw) ∷ allValid
+    addMsg : ValidMessageList (store env) ToIS → ValidMessageList (store env) ToIS
+    addMsg vml = record { inbox = Reference x (name foundFw) ∷ inbox vml ; valid = (reference foundFw) ∷ (ValidMessageList.valid vml) }
     withUpdatedInbox : Env
     withUpdatedInbox = updateInboxEnv env (reference foundTo) addMsg
     withTopDropped : Env
@@ -291,25 +268,13 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   ALift inc x with (♭ x)
 ... | bx = keepSimulating (TLift (name actor)) env'
   where
-    liftedRefs = liftRefs inc (references actor) (esEqRefs actor)
-    -- TODO: See if we can avoid using rewrite here
-    liftedBx : ActorM (IS actor) (A actor) (map justInbox (Σ.proj₁ liftedRefs)) (ce actor)
-    liftedBx rewrite (sym (Σ.proj₂ (Σ.proj₂ liftedRefs))) = bx
-    bxAct : Actor
-    bxAct = record
-              { IS = IS actor
-              ; A = A actor
-              ; references = Σ.proj₁ liftedRefs
-              ; es = map justInbox (Σ.proj₁ liftedRefs)
-              ; esEqRefs = refl
-              ; ce = ce actor
-              ; act = liftedBx
-              ; name = name actor
-              }
-    bxValid : ValidActor (Env.store env) bxAct
-    bxValid = record { hasInb = hasInb valid ; points = All-⊆ (Σ.proj₁ (Σ.proj₂ liftedRefs)) (points valid) }
+    liftedRefs = lift-references inc (references actor) (esEqRefs actor)
+    bxLifted : Actor
+    bxLifted = lift-actor actor (contained liftedRefs) (sym (contained-eq-inboxes liftedRefs)) bx
+    bxValid : ValidActor (Env.store env) bxLifted
+    bxValid = record { hasInb = hasInb valid ; points = All-⊆ (subset liftedRefs) (points valid) }
     env' : Env
-    env' = replace-actors env (bxAct ∷ rest) (bxValid ∷ restValid)
+    env' = replace-actors env (bxLifted ∷ rest) (bxValid ∷ restValid)
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   Self = keepSimulating (Self (name actor)) (dropTop env)
 

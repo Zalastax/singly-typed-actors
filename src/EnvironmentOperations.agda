@@ -13,12 +13,99 @@ open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
 open import Relation.Nullary using (Dec ; yes ; no)
+
+open import Level using (Lift ; lift)
 
 open Actor
 open ValidActor
 open Env
+
+new-actor : ∀ {IS A ce} → ActorM IS A [] ce → Name → Actor
+new-actor {IS} {A} {ce} m name = record
+                                        { IS = IS
+                                        ; A = A
+                                        ; references = []
+                                        ; es = []
+                                        ; esEqRefs = refl
+                                        ; ce = ce
+                                        ; act = m
+                                        ; name = name
+                                        }
+
+lift-actor : (actor : Actor) → {es : List InboxShape} → (references : List NamedInbox) → (esEqRefs : (map justInbox references) ≡ es) → ActorM (IS actor) (A actor) es (ce actor) → Actor
+lift-actor actor {es} references esEqRefs m = record
+                                              { IS = IS actor
+                                              ; A = A actor
+                                              ; references = references
+                                              ; es = es
+                                              ; esEqRefs = esEqRefs
+                                              ; ce = ce actor
+                                              ; act = m
+                                              ; name = name actor
+                                              }
+
+-- Replace the monadic part of an actor
+replace-actorM : (actor : Actor) → ActorM (IS actor) (A actor) (es actor) (ce actor) → Actor
+replace-actorM actor m = record
+                           { IS = IS actor
+                           ; A = A actor
+                           ; references = references actor
+                           ; es = es actor
+                           ; esEqRefs = esEqRefs actor
+                           ; ce = ce actor
+                           ; act = m
+                           ; name = name actor
+                           }
+
+add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM (IS actor) (A actor) (Σ.proj₂ nm ∷ es actor) (ce actor) → Actor
+add-reference actor nm m = record
+                             { IS = IS actor
+                             ; A = A actor
+                             ; references = nm ∷ references actor
+                             ; es = Σ.proj₂ nm ∷ es actor
+                             ; esEqRefs = cong (_∷_ (Σ.proj₂ nm)) (esEqRefs actor)
+                             ; ce = ce actor
+                             ; act = m
+                             ; name = name actor
+                             }
+
+record ValidMessageList (store : Store) (S : InboxShape) : Set₁ where
+  field
+    inbox : List (NamedMessage S)
+    valid : All (messageValid store) inbox
+
+record UpdatedInboxes (store : Store) (original : List Inbox) : Set₂ where
+  field
+    updated-inboxes : List Inbox
+    inboxes-valid : All (allMessagesValid store) updated-inboxes
+    same-store : inboxesToStore original ≡ inboxesToStore updated-inboxes
+
+open ValidMessageList
+open UpdatedInboxes
+
+update-inboxes : {name : Name} → {IS : InboxShape} →
+  (store : Store) →
+  (inboxes : List Inbox) →
+  (All (allMessagesValid store) inboxes) →
+  (name ↦ IS ∈e (inboxesToStore inboxes)) →
+  (f : ValidMessageList store IS → ValidMessageList store IS) →
+  UpdatedInboxes store inboxes
+update-inboxes store [] [] () f
+update-inboxes store (x ∷ inboxes) (px ∷ proofs) zero f with (f (record { inbox = Inbox.inb x ; valid = px }))
+... | updated = record {
+  updated-inboxes = updatedInbox ∷ inboxes
+  ; inboxes-valid = (valid updated) ∷ proofs
+  ; same-store = refl }
+  where
+    updatedInbox : Inbox
+    updatedInbox = record { IS = Inbox.IS x ; inb = inbox updated ; name = Inbox.name x }
+update-inboxes store (x ∷ inboxes) (px ∷ proofs) (suc reference) f with (update-inboxes store inboxes proofs reference f)
+... | updatedInboxes = record {
+  updated-inboxes = x ∷ updated-inboxes updatedInboxes
+  ; inboxes-valid = px ∷ inboxes-valid updatedInboxes
+  ; same-store = cong (_∷_ ((Inbox.name x) , (Inbox.IS x))) (same-store updatedInboxes) }
 
 -- Update one of the inboxes in a list of inboxes.
 -- All the inboxes have been proven to be valid in the context of a store,
@@ -28,7 +115,7 @@ open Env
 -- and a proof that all the messages are valid for the store.
 -- The update function returns a new list of the same type,
 -- and has to provide a proof that this list is also valid for the store
-updateInboxes :  {name : Name} → ∀ {IS} →
+{-updateInboxes :  {name : Name} → ∀ {IS} →
           (store : Store) →
           (inbs : List Inbox) →
           (All (allMessagesValid store) inbs) →
@@ -39,7 +126,7 @@ updateInboxes store [] prfs () f
 updateInboxes store (x ∷ inbs) (px ∷ prfs) zero f with (f (Inbox.inb x , px))
 ... | msgs , msgsValid = record { IS = Inbox.IS x ; inb = msgs ; name = Inbox.name x } ∷ inbs , msgsValid ∷ prfs , refl
 updateInboxes store (x ∷ inbs) (px ∷ prfs) (suc point) f with (updateInboxes store inbs prfs point f)
-... | proj₁ , proj₂ , proj₃ = (x ∷ proj₁) , ((px ∷ proj₂) , cong (λ q → ((Inbox.name x) , Inbox.IS x) ∷ q) proj₃)
+... | proj₁ , proj₂ , proj₃ = (x ∷ proj₁) , ((px ∷ proj₂) , cong (λ q → ((Inbox.name x) , Inbox.IS x) ∷ q) proj₃)-}
 
 -- Move the actor that is at the top of the list, to the back of the list
 -- This is done to create a round-robin system for the actors, since runEnv always picks the actor at the top
@@ -156,29 +243,24 @@ getInbox {name} {IS} env point  = loop (Env.inbs env) (Env.messagesValid env) (f
 -- Updates an inbox in the environment
 -- Just a wrapper arround 'updateInboxes'
 updateInboxEnv : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (Env.store env) →
-                 (f : Σ[ inLs ∈ List (NamedMessage IS)] All (messageValid (Env.store env)) inLs → Σ[ outLs ∈ List (NamedMessage IS)] All (messageValid (Env.store env)) outLs) → Env
+                 (f : ValidMessageList (store env) IS → ValidMessageList (store env) IS) → Env
 updateInboxEnv {name} {IS} env p f = record
-                           { acts = Env.acts env
-                           ; blocked = Env.blocked env
-                           ; inbs = Σ.proj₁ updatedInboxes
-                           ; store = Env.store env
-                           ; inbs=store = sameStoreAfterUpdate (Env.inbs=store env) -- updSameStore (Env.store env) (Env.inbs env) (Env.inbs=store env) p f
-                           ; freshName = Env.freshName env
-                           ; actorsValid = Env.actorsValid env -- ∀map updateActVal (Env.actorsValid env)
-                           ; blockedValid = Env.blockedValid env -- ∀map updateActVal (Env.blockedValid env)
-                           ; messagesValid = Σ.proj₁ (Σ.proj₂ updatedInboxes) -- updateMessagesVal (Env.messagesValid env) -- updateMessagesVal (Env.messagesValid env)
-                           ; nameIsFresh = Env.nameIsFresh env
+                           { acts = acts env
+                           ; blocked = blocked env
+                           ; inbs = updated-inboxes updatedInboxes
+                           ; store = store env
+                           ; inbs=store = trans (inbs=store env) (same-store updatedInboxes)
+                           ; freshName = freshName env
+                           ; actorsValid = actorsValid env
+                           ; blockedValid = blockedValid env
+                           ; messagesValid = inboxes-valid updatedInboxes
+                           ; nameIsFresh = nameIsFresh env
                            }
   where
     -- Just some helpers to align the types
     pp : name ↦ IS ∈e (inboxesToStore (Env.inbs env))
     pp rewrite (Env.inbs=store env) = p
-    updatedInboxes : Σ[ ls ∈ List Inbox ] All (allMessagesValid (Env.store env)) ls × (inboxesToStore (Env.inbs env) ≡ inboxesToStore ls)
-    updatedInboxes = updateInboxes (Env.store env) (Env.inbs env) (Env.messagesValid env) pp f
-    sameShapeAfterUpdate : inboxesToStore (Env.inbs env) ≡ inboxesToStore (Σ.proj₁ updatedInboxes)
-    sameShapeAfterUpdate = Σ.proj₂ (Σ.proj₂ updatedInboxes)
-    sameStoreAfterUpdate : (Env.store env ≡ (inboxesToStore (Env.inbs env))) → Env.store env ≡ inboxesToStore (Σ.proj₁ updatedInboxes)
-    sameStoreAfterUpdate refl = sameShapeAfterUpdate
+    updatedInboxes = update-inboxes (Env.store env) (Env.inbs env) (Env.messagesValid env) pp f
 
 -- Move an actor from the blocked list to the actors list.
 -- Simply looks through the names of all blocked actors and moves those (should be just 1 or 0) with the same name.
@@ -223,40 +305,44 @@ lookupReference {store} {actor} {ToIS} va ref = loop (Actor.es actor) (Actor.ref
     loop _ ((name , IS) ∷ refs) (reference ∷ prfs) refl (here refl) = record { name = name ; reference = reference }
     loop _ (x ∷ refs) (px ∷ prfs) refl (there ref) = loop _ refs prfs refl ref
 
-liftRefs : ∀ {yss ess} → yss ⊆ ess → (refs : List NamedInbox) → (map justInbox refs) ≡ ess → Σ[ refs' ∈ List NamedInbox ] refs' ⊆ refs × yss ≡ map justInbox refs'
-liftRefs [] [] refl = [] , ([] , refl)
-liftRefs [] (x ∷ refs) refl = [] , ([] , refl)
-liftRefs (keep subs) [] ()
-liftRefs (keep subs) (x ∷ refs) refl with (liftRefs subs refs refl)
-... | refs' , subs' , refl = (x ∷ refs') , ((keep subs') , refl)
-liftRefs (skip subs) [] ()
-liftRefs (skip subs) (x ∷ refs) refl with (liftRefs subs refs refl)
-... | refs' , subs' , refl = refs' , (skip subs' , refl)
+record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbox) : Set₂ where
+  field
+    subset-inbox : lss ⊆ gss
+    contained : List NamedInbox
+    subset : contained ⊆ references
+    contained-eq-inboxes : lss ≡ map justInbox contained
 
--- Replace the monadic part of an actor
-replace-actorM : (actor : Actor) → ActorM (IS actor) (A actor) (es actor) (ce actor) → Actor
-replace-actorM actor m = record
-                           { IS = IS actor
-                           ; A = A actor
-                           ; references = references actor
-                           ; es = es actor
-                           ; esEqRefs = esEqRefs actor
-                           ; ce = ce actor
-                           ; act = m
-                           ; name = name actor
-                           }
+open LiftedReferences
 
-add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM (IS actor) (A actor) (Σ.proj₂ nm ∷ es actor) (ce actor) → Actor
-add-reference actor nm m = record
-                             { IS = IS actor
-                             ; A = A actor
-                             ; references = nm ∷ references actor
-                             ; es = Σ.proj₂ nm ∷ es actor
-                             ; esEqRefs = cong (_∷_ (Σ.proj₂ nm)) (esEqRefs actor)
-                             ; ce = ce actor
-                             ; act = m
-                             ; name = name actor
-                             }
+lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map justInbox references ≡ gss → LiftedReferences lss gss references
+lift-references [] [] refl = record
+                               { subset-inbox = []
+                               ; contained = []
+                               ; subset = []
+                               ; contained-eq-inboxes = refl
+                               }
+lift-references (keep subs) [] ()
+lift-references (skip subs) [] ()
+lift-references [] (x ∷ references₁) refl = record
+                                              { subset-inbox = []
+                                              ; contained = []
+                                              ; subset = []
+                                              ; contained-eq-inboxes = refl
+                                              }
+lift-references (keep subs) (x ∷ references) refl with (lift-references subs references refl)
+... | lifted = record
+                 { subset-inbox = keep subs
+                 ; contained = x ∷ contained lifted
+                 ; subset = keep (subset lifted)
+                 ; contained-eq-inboxes = cong (_∷_ (justInbox x)) (contained-eq-inboxes lifted)
+                 }
+lift-references (skip subs) (x ∷ references) refl with (lift-references subs references refl)
+... | lifted = record
+                 { subset-inbox = skip subs
+                 ; contained = contained lifted
+                 ; subset = skip (subset lifted)
+                 ; contained-eq-inboxes = contained-eq-inboxes lifted
+                 }
 
 replace-actors : (env : Env) → (actors : List Actor) → All (ValidActor (store env)) actors → Env
 replace-actors env actors actorsValid = record {
