@@ -16,6 +16,9 @@ open import Data.Unit using (⊤ ; tt)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong)
 open import Relation.Nullary using (Dec ; yes ; no)
 
+open Actor
+open ValidActor
+open Env
 
 -- Update one of the inboxes in a list of inboxes.
 -- All the inboxes have been proven to be valid in the context of a store,
@@ -131,18 +134,13 @@ addTop {IS} {A} {ce} act env = record
                                  ; blocked = Env.blocked env
                                  ; inbs = record { IS = IS ; inb = [] ; name = Env.freshName env } ∷ Env.inbs env
                                  ; store = (Env.freshName env , IS) ∷ Env.store env
-                                 ; inbs=store = ∷-refl (Env.freshName env , IS) (Env.inbs=store env)
+                                 ; inbs=store = cong (_∷_ ((freshName env) , IS)) (inbs=store env)
                                  ; freshName = suc (Env.freshName env)
                                  ; actorsValid = record { hasInb = zero ; points = [] } ∷ ∀map (ValidActorSuc (Env.nameIsFresh env)) (Env.actorsValid env)
                                  ; blockedValid = ∀map (ValidActorSuc (Env.nameIsFresh env)) (Env.blockedValid env)
                                  ; messagesValid = [] ∷ ∀map (λ {x} vi → messagesValidSuc {_} {x} (Env.nameIsFresh env) vi) (Env.messagesValid env)
                                  ; nameIsFresh = Data.Nat.s≤s (≤-reflexive refl) ∷ ∀map  Data.Nat.Properties.≤-step (Env.nameIsFresh env)
                                  }
-       where
-         ∷-refl : ∀ {store store'} → ∀ w →
-                store ≡ store' →
-                w ∷ store ≡ w ∷ store'
-         ∷-refl v p rewrite p = refl
 
 -- Extracts the messages in an inbox from the environment, given a pointer to the store of that environment
 getInbox : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (Env.store env) → Σ[ ls ∈ List (NamedMessage IS) ] All (messageValid (Env.store env)) ls
@@ -211,13 +209,18 @@ unblockActor env name = newEnv (loop (Env.blocked env) (Env.blockedValid env))
                                                              ; nameIsFresh = Env.nameIsFresh env
                                                              }
 
+record FoundReference (store : Store) (S : InboxShape) : Set₂ where
+  field
+    name : Name
+    reference : name ↦ S ∈e store
+
 -- looks up the pointer for one of the references known by an actor
-lookupReference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (Actor.es actor) → Σ[ name ∈ Name ] name ↦ ToIS ∈e store
+lookupReference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (Actor.es actor) → FoundReference store ToIS
 lookupReference {store} {actor} {ToIS} va ref = loop (Actor.es actor) (Actor.references actor) (ValidActor.points va) (Actor.esEqRefs actor) ref
   where
-    loop : (es : List InboxShape) → (refs : List NamedInbox) → (All (λ ref → Σ.proj₁ ref ↦ Σ.proj₂ ref ∈e store) refs) → (map justInbox refs ≡ es) → ToIS ∈ es → Σ[ name ∈ Name ] name ↦ ToIS ∈e store
+    loop : (es : List InboxShape) → (refs : List NamedInbox) → (All (λ ref → Σ.proj₁ ref ↦ Σ.proj₂ ref ∈e store) refs) → (map justInbox refs ≡ es) → ToIS ∈ es → FoundReference store ToIS
     loop .[] [] prfs refl ()
-    loop _ ((name , IS) ∷ refs) (px₁ ∷ prfs) refl (here refl) = name , px₁
+    loop _ ((name , IS) ∷ refs) (reference ∷ prfs) refl (here refl) = record { name = name ; reference = reference }
     loop _ (x ∷ refs) (px ∷ prfs) refl (there ref) = loop _ refs prfs refl ref
 
 liftRefs : ∀ {yss ess} → yss ⊆ ess → (refs : List NamedInbox) → (map justInbox refs) ≡ ess → Σ[ refs' ∈ List NamedInbox ] refs' ⊆ refs × yss ≡ map justInbox refs'
@@ -229,3 +232,59 @@ liftRefs (keep subs) (x ∷ refs) refl with (liftRefs subs refs refl)
 liftRefs (skip subs) [] ()
 liftRefs (skip subs) (x ∷ refs) refl with (liftRefs subs refs refl)
 ... | refs' , subs' , refl = refs' , (skip subs' , refl)
+
+-- Replace the monadic part of an actor
+replace-actorM : (actor : Actor) → ActorM (IS actor) (A actor) (es actor) (ce actor) → Actor
+replace-actorM actor m = record
+                           { IS = IS actor
+                           ; A = A actor
+                           ; references = references actor
+                           ; es = es actor
+                           ; esEqRefs = esEqRefs actor
+                           ; ce = ce actor
+                           ; act = m
+                           ; name = name actor
+                           }
+
+add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM (IS actor) (A actor) (Σ.proj₂ nm ∷ es actor) (ce actor) → Actor
+add-reference actor nm m = record
+                             { IS = IS actor
+                             ; A = A actor
+                             ; references = nm ∷ references actor
+                             ; es = Σ.proj₂ nm ∷ es actor
+                             ; esEqRefs = cong (_∷_ (Σ.proj₂ nm)) (esEqRefs actor)
+                             ; ce = ce actor
+                             ; act = m
+                             ; name = name actor
+                             }
+
+replace-actors : (env : Env) → (actors : List Actor) → All (ValidActor (store env)) actors → Env
+replace-actors env actors actorsValid = record {
+  acts = actors
+  ; blocked = blocked env
+  ; inbs = inbs env
+  ; store = store env
+  ; inbs=store = inbs=store env
+  ; freshName = freshName env
+  ; actorsValid = actorsValid
+  ; blockedValid = blockedValid env
+  ; messagesValid = messagesValid env
+  ; nameIsFresh = nameIsFresh env
+  }
+
+replace-actors+blocked : (env : Env) →
+                          (actors : List Actor) → All (ValidActor (store env)) actors →
+                          (blocked : List Actor) → All (ValidActor (store env)) blocked → Env
+replace-actors+blocked env actors actorsValid blocked blockedValid = record {
+  acts = actors
+  ; blocked = blocked
+  ; inbs = inbs env
+  ; store = store env
+  ; inbs=store = inbs=store env
+  ; freshName = freshName env
+  ; actorsValid = actorsValid
+  ; blockedValid = blockedValid
+  ; messagesValid = messagesValid env
+  ; nameIsFresh = nameIsFresh env
+  }
+
