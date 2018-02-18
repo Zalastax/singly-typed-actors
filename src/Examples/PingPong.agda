@@ -52,7 +52,7 @@ mutual
   pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference pingrefs msg) constPingrefs)
   pingReceive (Value (here refl) b) = return b
   pingReceive (Value (there ()) _)
-  pingReceive (Reference _) = ♯ ALift (λ q → there q) loopTillPingValue
+  pingReceive (Reference _) = ♯ ALift there loopTillPingValue
 
   loopTillPingValue : ∞ (pingMainActor (Lift Bool))
   loopTillPingValue = ♯ (receive >>= pingReceive)
@@ -83,7 +83,7 @@ mutual
   pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference pongrefs msg) constPongrefs)
   pongReceive (Value (here refl) n) = return n
   pongReceive (Value (there ()) _)
-  pongReceive (Reference _) = ♯ ALift (λ q → there q) loopTillPongValue
+  pongReceive (Reference _) = ♯ ALift there loopTillPongValue
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
   loopTillPongValue = ♯ (receive >>= pongReceive)
 
