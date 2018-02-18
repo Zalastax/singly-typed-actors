@@ -1,17 +1,18 @@
+{-# OPTIONS --allow-unsolved-metas #-}
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership-equality using (_∈_)
-open import Sublist using (_⊆_ ; [] ; keep ; skip)
+open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺ ; drop⁺)
-open import Data.List.Any using (here ; there)
+open import Data.List.Any using (Any ; here ; there)
 open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_)
 open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
+open import Data.Empty using (⊥ ; ⊥-elim)
 
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
 open import Relation.Nullary using (Dec ; yes ; no)
@@ -317,9 +318,11 @@ lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS �
 lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
   where
     loop : (pre : ReferenceTypes) → (refs : List NamedInbox) → (All (λ ni → name ni ↦ shape ni ∈e store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
-    loop .[] [] prfs refl ()
-    loop _ (inbox# name [ IS ] ∷ refs) (reference ∷ prfs) refl (here refl) = record { name = name ; reference = reference }
-    loop _ (x ∷ refs) (px ∷ prfs) refl (there ref) = loop _ refs prfs refl ref
+    loop [] refs prfs eq ()
+    loop _ [] prfs () Z
+    loop _ [] prfs () (S px)
+    loop _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record { name = name ; reference = reference }
+    loop _ (x ∷ refs) (px₁ ∷ prfs) refl (S px) = loop _ refs prfs refl px
 
 record LiftedReferences (lss gss : ReferenceTypes) (references : List NamedInbox) : Set₂ where
   field
@@ -332,34 +335,27 @@ open LiftedReferences
 
 -- Convert a subset for preconditions to a subset for references
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references [] [] refl = record
-                               { subset-inbox = []
-                               ; contained = []
-                               ; subset = []
-                               ; contained-eq-inboxes = refl
-                               }
-lift-references (keep subs) [] ()
-lift-references (skip subs) [] ()
-lift-references [] (x ∷ references₁) refl = record
-                                              { subset-inbox = []
-                                              ; contained = []
-                                              ; subset = []
-                                              ; contained-eq-inboxes = refl
-                                              }
-lift-references (keep subs) (x ∷ references) refl with (lift-references subs references refl)
-... | lifted = record
-                 { subset-inbox = keep subs
-                 ; contained = x ∷ contained lifted
-                 ; subset = keep (subset lifted)
-                 ; contained-eq-inboxes = cong (_∷_ (shape x)) (contained-eq-inboxes lifted)
-                 }
-lift-references (skip subs) (x ∷ references) refl with (lift-references subs references refl)
-... | lifted = record
-                 { subset-inbox = skip subs
-                 ; contained = contained lifted
-                 ; subset = skip (subset lifted)
-                 ; contained-eq-inboxes = contained-eq-inboxes lifted
-                 }
+lift-references SubNil refs refl = record
+                                     { subset-inbox = SubNil
+                                     ; contained = []
+                                     ; subset = SubNil
+                                     ; contained-eq-inboxes = refl
+                                     }
+lift-references (InList {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
+... | q  = record
+                                             { subset-inbox = InList x₁ subs
+                                             ; contained = (lookup-parallel x₁ refs shape refl) ∷ contained q
+                                             ; subset = InList (translate-∈ x₁ refs shape refl) (subset q)
+                                             ; contained-eq-inboxes = combine y (shape (lookup-parallel x₁ refs shape refl)) xs (map shape (contained q)) contained-el-ok (contained-eq-inboxes q)
+                                             }
+  where
+    contained-el : NamedInbox
+    contained-el = lookup-parallel x₁ refs shape refl
+    contained-el-shape = shape contained-el
+    contained-el-ok : y ≡ contained-el-shape
+    contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
+    combine : (a b : InboxShape) → (as bs : List InboxShape) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
+    combine a .a as .as refl refl = refl
 
 -- We can replace the actors in an environment if they all are valid for the current store.
 replace-actors : (env : Env) → (actors : List Actor) → All (ValidActor (store env)) actors → Env

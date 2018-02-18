@@ -8,7 +8,7 @@ open import Coinduction
 open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Sublist using ([] ; keep ; skip ; reflexive-⊆)
+open import Membership using (_∈_ ; _⊆_ ; S ; Z ; InList ; SubNil)
 open import Data.Unit using (⊤ ; tt)
 
 open InboxShape
@@ -50,9 +50,9 @@ pingMainActor A = ActorM Pingbox A pingrefs constPingrefs
 
 mutual
   pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference pingrefs msg) constPingrefs)
-  pingReceive (Value (here refl) b) = return b
-  pingReceive (Value (there ()) _)
-  pingReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPingValue
+  pingReceive (Value Z b) = return b
+  pingReceive (Value (S ()) _)
+  pingReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPingValue
 
   loopTillPingValue : ∞ (pingMainActor (Lift Bool))
   loopTillPingValue = ♯ (receive >>= pingReceive)
@@ -63,11 +63,11 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
     loopTillPong : ∞ (ActorM Pingbox ⊤₁ [] constPingrefs)
     loopTillPong = ♯ (receive >>= ((λ
       { (Value _ _) → loopTillPong
-      ; (Reference (here refl)) → return _
-      ; (Reference (there ())) })))
+      ; (Reference Z) → return _
+      ; (Reference (S ())) })))
     pingMain : ℕ → ∞ (pingMainActor ⊤₁)
     pingMain n = ♯ ((loopTillPingValue >>= λ
-      { (lift false) → ♯ ( (here refl !v Value (here refl) n) >>= λ _ → pingMain (suc n))
+      { (lift false) → ♯ ( (Z !v Value Z n) >>= λ _ → pingMain (suc n))
       ; (lift true) → return _}))
 
 pongrefs : ReferenceTypes
@@ -81,28 +81,28 @@ pongMainActor A = ActorM Pongbox A pongrefs constPongrefs
 
 mutual
   pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference pongrefs msg) constPongrefs)
-  pongReceive (Value (here refl) n) = return n
-  pongReceive (Value (there ()) _)
-  pongReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPongValue
-
+  pongReceive (Value Z n) = return n
+  pongReceive (Value (S ()) _)
+  pongReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPongValue
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
   loopTillPongValue = ♯ (receive >>= pongReceive)
 
 ponger : ActorM Pongbox ⊤₁ [] constPongrefs
-ponger = loopTillPing >>= λ _ → ♯ ((here refl !v Value (here refl) false) >>= λ _ → pongMain)
+ponger = loopTillPing >>= λ _ → ♯ ((Z !v Value Z false) >>= λ _ → pongMain)
   where
     loopTillPing : ∞ (ActorM Pongbox ⊤₁ [] constPongrefs)
     loopTillPing = ♯ (receive >>= λ
       { (Value _ _) → loopTillPing
-      ; (Reference (here refl)) → return _
-      ; (Reference (there ()))})
+      ; (Reference Z) → return _
+      ; (Reference (S ()))})
     pongMain : ∞ (pongMainActor ⊤₁)
     pongMain = ♯ (loopTillPongValue >>= λ
-      { (lift 10) → ♯ (here refl !v Value (here refl) true >>= λ _ → return _)
-        ; (lift n) → ♯ (here refl !v Value (here refl) false >>= λ _ → pongMain)})
+      { (lift 10) → ♯ (Z !v Value Z true >>= λ _ → return _)
+        ; (lift n) → ♯ (Z !v Value Z false >>= λ _ → pongMain)})
 
 spawner : ActorM Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ Pongbox ∷ [])
 spawner = spawn ponger >>= λ _ →
           ♯ (spawn pinger >>= λ _ →
-          ♯ (to here refl !r Reference (here refl) via there (here refl) >>= λ _ →
-          to there (here refl) !r Reference (here refl) via here refl))
+          ♯ (to Z !r Reference Z via S Z >>= λ _ →
+          to S Z !r Reference Z via Z))
+

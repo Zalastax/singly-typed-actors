@@ -1,5 +1,5 @@
 module SimulationEnvironment where
-open import Membership-equality using (_∈_)
+open import Membership using (_∈_)
 open import ActorMonad
 
 open import Data.List using (List ; _∷_ ; [] ; map)

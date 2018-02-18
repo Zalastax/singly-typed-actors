@@ -1,91 +1,54 @@
-------------------------------------------------------------------------
--- List membership and some related definitions
-open import Level using (Level; _⊔_)
-open import Relation.Binary
-open import Relation.Binary.List.Pointwise as ListEq using ([]; _∷_)
-open import Relation.Nullary
+module Membership where
+-- open import Data.List.Any.Membership.Propositional public
+
 open import Data.List
-open import Data.List.Any
-open import Function
-import Relation.Binary.InducedPreorders as Ind
-open import Data.Product as Prod using (∃; _×_; _,_)
-module Membership {c ℓ : Level} (S : Setoid c ℓ) where
+open import Data.List.Any using ()
+open import Data.List.All using (All ; [] ; _∷_)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+open import Data.Empty using (⊥)
 
-  private
-    open module  S = Setoid S using (_≈_) renaming (Carrier to A)
-    open module LS = Setoid (ListEq.setoid S)
-      using () renaming (_≈_ to _≋_)
+data _∈_ {a} {A : Set a} : A → (List A) -> Set a where
+  Z : ∀ {x xs} → x ∈ (x ∷ xs)
+  S : ∀ {x y xs} → x ∈ xs -> x ∈ (y ∷ xs)
 
-  -- If a predicate P respects the underlying equality then Any P
-  -- respects the list equality.
+x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
+x∈[]-⊥ ()
 
-  lift-resp : ∀ {p} {P : A → Set p} →
-              P Respects _≈_ → Any P Respects _≋_
-  lift-resp resp []            ()
-  lift-resp resp (x≈y ∷ xs≈ys) (here px)   = here (resp x≈y px)
-  lift-resp resp (x≈y ∷ xs≈ys) (there pxs) =
-    there (lift-resp resp xs≈ys pxs)
+data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
+  SubNil : ∀ {xs} → [] ⊆ xs
+  InList : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
 
-  -- List membership.
+lookup-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
+lookup-∈ {ls = x ∷ xs} Z = x
+lookup-∈ (S px) = lookup-∈ px
 
-  infix 4 _∈_ _∉_
+translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} → (ls ⊆ ks) → (x ∈ ls) → (x ∈ ks)
+translate-⊆ SubNil ()
+translate-⊆ (InList x₂ subs) Z = x₂
+translate-⊆ (InList x₂ subs) (S px) = translate-⊆ subs px
 
-  _∈_ : A → List A → Set _
-  x ∈ xs = Any (_≈_ x) xs
+lookup-parallel : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} → x ∈ gss → (refs : List B) → (f : B → A) → map f refs ≡ gss → B
+lookup-parallel Z [] f ()
+lookup-parallel Z (x ∷ refs) f refl = x
+lookup-parallel (S px) [] f ()
+lookup-parallel (S px) (x ∷ refs) f refl = lookup-parallel px refs f refl
 
-  _∉_ : A → List A → Set _
-  x ∉ xs = ¬ x ∈ xs
+lookup-parallel-≡ : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} → (x₁ : x ∈ gss) → (refs : List B) → (f : B → A) → (eq : map f refs ≡ gss) → x ≡ f (lookup-parallel x₁ refs f eq)
+lookup-parallel-≡ Z [] f ()
+lookup-parallel-≡ Z (x ∷ refs) f refl = refl
+lookup-parallel-≡ (S px) [] f ()
+lookup-parallel-≡ (S px) (x ∷ refs) f refl = lookup-parallel-≡ px refs f refl
 
-  -- Subsets.
+translate-∈ : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} (x₁ : x ∈ gss) → (refs : List B) → (f : B → A) → (eq : map f refs ≡ gss) → lookup-parallel x₁ refs f eq ∈ refs
+translate-∈ Z [] f ()
+translate-∈ (S px) [] f ()
+translate-∈ Z (x ∷ refs) f refl = Z
+translate-∈ (S px) (x ∷ refs) f refl = S (translate-∈ px refs f refl)
 
-  infix 4 _⊆_ _⊈_
+lookup-all : ∀ {a p} {A : Set a} {P : A → Set p} {ls : List A} {x : A} → x ∈ ls → All P ls → P x
+lookup-all Z (px ∷ pxs) = px
+lookup-all (S px) (px₁ ∷ pxs) = lookup-all px pxs
 
-  _⊆_ : List A → List A → Set _
-  xs ⊆ ys = ∀ {x} → x ∈ xs → x ∈ ys
-
-  _⊈_ : List A → List A → Set _
-  xs ⊈ ys = ¬ xs ⊆ ys
-
-  -- Equality is respected by the predicate which is used to define
-  -- _∈_.
-
-  ∈-resp-≈ : ∀ {x} → (_≈_ x) Respects _≈_
-  ∈-resp-≈ = flip S.trans
-
-  -- List equality is respected by _∈_.
-
-  ∈-resp-list-≈ : ∀ {x} → _∈_ x Respects _≋_
-  ∈-resp-list-≈ = lift-resp ∈-resp-≈
-
-  -- _⊆_ is a preorder.
-
-  ⊆-preorder : Preorder _ _ _
-  ⊆-preorder = Ind.InducedPreorder₂ (ListEq.setoid S) _∈_ ∈-resp-list-≈
-
-  module ⊆-Reasoning where
-    import Relation.Binary.PreorderReasoning as PreR
-    open PreR ⊆-preorder public
-      renaming (_∼⟨_⟩_ to _⊆⟨_⟩_)
-
-    infix 1 _∈⟨_⟩_
-
-    _∈⟨_⟩_ : ∀ x {xs ys} → x ∈ xs → xs IsRelatedTo ys → x ∈ ys
-    x ∈⟨ x∈xs ⟩ xs⊆ys = (begin xs⊆ys) x∈xs
-
-  -- A variant of List.map.
-
-  map-with-∈ : ∀ {b} {B : Set b}
-               (xs : List A) → (∀ {x} → x ∈ xs → B) → List B
-  map-with-∈ []       f = []
-  map-with-∈ (x ∷ xs) f = f (here S.refl) ∷ map-with-∈ xs (f ∘ there)
-
-  -- Finds an element satisfying the predicate.
-
-  find : ∀ {p} {P : A → Set p} {xs} →
-         Any P xs → ∃ λ x → x ∈ xs × P x
-  find (here px)   = (_ , here S.refl , px)
-  find (there pxs) = Prod.map id (Prod.map there id) (find pxs)
-
-  lose : ∀ {p} {P : A → Set p} {x xs} →
-         P Respects _≈_ → x ∈ xs → P x → Any P xs
-  lose resp x∈xs px = Data.List.Any.map (flip resp px) x∈xs
+All-⊆ : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys} → xs ⊆ ys → All P ys → All P xs
+All-⊆ {xs = []} {ys} subs pys = []
+All-⊆ (InList x₁ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
