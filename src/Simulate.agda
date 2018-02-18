@@ -1,6 +1,6 @@
 module Simulate where
 
-open import Sublist using (_⊆_ ; [] ; keep ; skip ; All-⊆)
+open import Membership using (_∈_ ; _⊆_ ; All-⊆)
 open import ActorMonad public
 open import SimulationEnvironment
 open import EnvironmentOperations

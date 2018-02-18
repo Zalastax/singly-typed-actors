@@ -1,8 +1,8 @@
+{-# OPTIONS --allow-unsolved-metas #-}
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership-equality using (_∈_)
-open import Sublist using (_⊆_ ; [] ; keep ; skip)
+open import Membership using (_∈_ ; _⊆_)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -332,7 +332,8 @@ open LiftedReferences
 
 -- Convert a subset for preconditions to a subset for references
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references [] [] refl = record
+lift-references = {!!}
+{- lift-references [] [] refl = record
                                { subset-inbox = []
                                ; contained = []
                                ; subset = []
@@ -359,7 +360,7 @@ lift-references (skip subs) (x ∷ references) refl with (lift-references subs r
                  ; contained = contained lifted
                  ; subset = skip (subset lifted)
                  ; contained-eq-inboxes = contained-eq-inboxes lifted
-                 }
+                 }-}
 
 -- We can replace the actors in an environment if they all are valid for the current store.
 replace-actors : (env : Env) → (actors : List Actor) → All (ValidActor (store env)) actors → Env

@@ -1,6 +1,5 @@
 module ActorMonad where
-open import Membership-equality using (_∈_)
-open import Sublist using (_⊆_)
+open import Membership using (_∈_ ; _⊆_)
 
 open import Data.List using (List ; [] ; _∷_)
 open import Data.Unit using (⊤ ; tt)

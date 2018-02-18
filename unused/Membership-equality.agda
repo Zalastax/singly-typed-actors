@@ -1,6 +1,6 @@
 module Membership-equality where
 
-import Membership
+import Membership-old
 open import Relation.Binary.PropositionalEquality as PropEq
 open import Data.List
 open import Data.List.Any
@@ -9,8 +9,8 @@ import Relation.Binary.InducedPreorders as Ind
 open import Function.Related as Related hiding (_∼[_]_)
 
 private
-  open module M {a} {A : Set a} = Membership (PropEq.setoid A) public
-    hiding (lift-resp; lose; ⊆-preorder; module ⊆-Reasoning)
+  open module M {a} {A : Set a} = Membership-old (PropEq.setoid A) public
+    hiding (lose; ⊆-preorder)
 
 lose : ∀ {a p} {A : Set a} {P : A → Set p} {x xs} →
          x M.∈ xs → P x → Any P xs
@@ -21,6 +21,7 @@ lose {P = P} = M.lose (PropEq.subst P)
 ⊆-preorder : ∀ {a} → Set a → Preorder _ _ _
 ⊆-preorder A = Ind.InducedPreorder₂ (PropEq.setoid (List A)) _∈_
                                       (PropEq.subst (_∈_ _))
+
 
   -- Set and bag equality and related preorders.
 
