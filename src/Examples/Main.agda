@@ -4,6 +4,6 @@ open import Runtime
 open import SimulationEnvironment
 import IO
 
-spawnerEnv = singletonEnv PingPong.spawner
+spawnerEnv = singleton-env PingPong.spawner
 
-main = IO.run (runEnv trace+actors-logger  spawnerEnv)
+main = IO.run (run-env trace+actors-logger  spawnerEnv)

@@ -27,17 +27,17 @@ open InboxShape
 -- Ponger keeps sending 'false' until it receives a message containing 10.
 
 Spawnbox : InboxShape
-Spawnbox = record { Values = [] ; References = [] }
+Spawnbox = record { value-types = [] ; reference-types = [] }
 
 
 mutual
   Pingbox : InboxShape
-  Pingbox .Values = Bool ∷ []
-  Pingbox .References = Pongbox ∷ []
+  Pingbox .value-types = Bool ∷ []
+  Pingbox .reference-types = Pongbox ∷ []
 
   Pongbox : InboxShape
-  Pongbox .Values = ℕ ∷ []
-  Pongbox .References = Pingbox ∷ []
+  Pongbox .value-types = ℕ ∷ []
+  Pongbox .reference-types = Pingbox ∷ []
 
 pingrefs : List InboxShape
 pingrefs = Pongbox ∷ []
@@ -49,7 +49,7 @@ pingMainActor : (A : Set₁) → Set₂
 pingMainActor A = ActorM Pingbox A pingrefs constPingrefs
 
 mutual
-  pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (addIfRef pingrefs msg) constPingrefs)
+  pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference pingrefs msg) constPingrefs)
   pingReceive (Value (here refl) b) = return b
   pingReceive (Value (there ()) _)
   pingReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPingValue
@@ -80,7 +80,7 @@ pongMainActor : (A : Set₁) → Set₂
 pongMainActor A = ActorM Pongbox A pongrefs constPongrefs
 
 mutual
-  pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (addIfRef pongrefs msg) constPongrefs)
+  pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference pongrefs msg) constPongrefs)
   pongReceive (Value (here refl) n) = return n
   pongReceive (Value (there ()) _)
   pongReceive (Reference _) = ♯ ALift (skip reflexive-⊆) loopTillPongValue

@@ -12,144 +12,202 @@ open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym)
 
+-- We give every actor and inbox a name
+-- The internal type of an actor is not important,
+-- but the type needs to have an easy way of creating
+-- new unique values and an easy way to prove that the name
+-- is not already used.
+-- For ℕ we can create new values using suc,
+-- and can prove that it is unused by proving that every
+-- previously used name is < than the new name.
 Name = ℕ
 
-NamedInbox = Name × InboxShape
+-- Named inboxes are just an inbox shape and a name.
+-- We use this representation to separate the shape of the store and
+-- the actual storing of inboxes with messages.
+record NamedInbox : Set₁ where
+  constructor inbox#_[_]
+  field
+    name : Name
+    shape : InboxShape
+
+-- The store is a list of named inboxes
+-- This only describes the shape of the store and does not contain any messages.
+-- Making this separation between the shape and the actual storing makes it less
+-- cumbersome to prove that updating an inbox does not invalidate all the pointers into the store.
+-- The store is basically just a key-value list.
+-- The store does not stop you from inserting duplicate keys,
+-- but doing so would invalidate the other pointers with that name,
+-- meaning that you can only insert duplicate keys
+-- if the value InboxShape is the same as the already stored value.
+-- Inserting duplicate keys is thus pointless and is not done anywhere in the code.
 Store = List NamedInbox
 
+-- Decidable inequality
 ¬[_] : ∀ {a b : Name} → Dec (a ≡ b) → Set
 ¬[ (yes x₁) ] = ⊥
 ¬[ (no x₁) ] = ⊤
 
+-- Also decidable inequality
 _¬≡_ : ( a b : Name) → Set
 a ¬≡ b = ¬[ a ≟ b ]
 
-data _↦_∈e_ (n : Name) (S : InboxShape) : List NamedInbox → Set where
-  zero : ∀ {xs}            → n ↦ S ∈e ((n , S) ∷ xs)
+-- A pointer into the store.
+-- This is a proof that the name points to an inbox shape in the store.
+-- The store is a key-value list that returns the first value matching the key (name).
+-- Indexing into the store is done by building the peano-number to the index of the element.
+-- To create the successor you have to provide a proof that you're not going past the name
+-- you're looking for.
+data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
+  zero : ∀ {xs}            → n ↦ S ∈e (inbox# n [ S ] ∷ xs)
   suc  : ∀ {n' : Name} { S' xs} {pr : n ¬≡ n'}
-         → n ↦ S ∈e xs → n ↦ S ∈e ((n' , S') ∷ xs)
-
-justInbox : (Name × InboxShape) → InboxShape
-justInbox = Σ.proj₂
+         → n ↦ S ∈e xs → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
 
 -- An ActorM wrapped up with all of its parameters
--- Useful for storing ActorM of different type in the same list
--- We give each actor a name as preparation for the proof writing.
--- The proofs will use a heap, just as in separation logic.
+-- We use this to be able to store actor monads of different types in the same list.
+-- We give each actor a name so that we can find its inbox in the store.
 record Actor : Set₂ where
   field
-    IS : InboxShape
+    inbox-shape : InboxShape
     A : Set₁
+    -- The references are just the preconditions with the name of the actor
+    -- of that shape added.
+    -- The references are used by the runtime to know which inbox corresponds to
+    -- which shape, letting us know which inbox to update when a message is sent.
     references : List NamedInbox
-    es : List InboxShape
-    esEqRefs : (map justInbox references) ≡ es
-    ce : A → List InboxShape
-    act : ActorM IS A es ce
+    pre : List InboxShape
+    pre-eq-refs : (map NamedInbox.shape references) ≡ pre
+    post : A → List InboxShape
+    actor-m : ActorM inbox-shape A pre post
     name : Name
 
+-- We can look up which inbox a reference refers to when a message is sent.
+-- We can however not add the reference to the actor immediately,
+-- since the reference should only be added when the message is received.
+-- By storing the name of the inbox being referenced we can know which inbox
+-- is being referenced whenever the message is received.
+--
+-- The decision to use names for references and pointers, rather than just ∈,
+-- makes it possible to prove that a sent message containing a reference
+-- does not need to be modified when more actors are added.
 data NamedMessage (S : InboxShape): Set₁ where
-  Value : ∀ {A} → A ∈ InboxShape.Values S → A → NamedMessage S
-  Reference : ∀ {Fw} → Fw ∈ InboxShape.References S → Name → NamedMessage S
+  Value : ∀ {A} → A is-value-in S → A → NamedMessage S
+  Reference : ∀ {Fw} → Fw ∈ InboxShape.reference-types S → Name → NamedMessage S
 
 -- A list of messages, wrapped up with the shape of the messages
 -- Each inbox is given a name, matching those for actors
 record Inbox : Set₂ where
   field
-    IS : InboxShape
-    inb : List (NamedMessage IS)
+    inbox-shape : InboxShape
+    inbox-messages : List (NamedMessage inbox-shape)
     name : Name
 
 -- Property that there exists an inbox of the right shape in the list of inboxes
--- This is used both for proving that every actor has an inbox, and for proving that every reference known by an actor has an inbox
-hasInbox : Store → Actor → Set
-hasInbox store actor = Actor.name actor ↦ Actor.IS actor ∈e store
+-- This is used both for proving that every actor has an inbox,
+-- and for proving that every reference known by an actor has an inbox
+has-inbox : Store → Actor → Set
+has-inbox store actor = Actor.name actor ↦ Actor.inbox-shape actor ∈e store
 
--- Property that for every shape, there exists an inbox of that shape
--- Used for proving that every reference known by an actor has an inbox
-allPointersCorrect : Store → Actor → Set₁
-allPointersCorrect store actor = All (λ ref → Σ.proj₁ ref ↦ Σ.proj₂ ref ∈e store) (Actor.references actor)
+-- Property that for every shape, there exists an inbox of that shape.
+-- Used for proving that every reference known by an actor has an inbox.
+all-references-have-a-pointer : Store → Actor → Set₁
+all-references-have-a-pointer store actor = All (λ ni → name ni ↦ shape ni ∈e store) (Actor.references actor)
+  where open NamedInbox
 
 -- An actor is valid in the context 'ls' iff:
 -- There is an inbox of the right shape in 'ls'.
 -- For every reference in the actor's list of references has an inbox of the right shape in 'ls'
-record ValidActor (store : Store) (act : Actor) : Set₂ where
+record ValidActor (store : Store) (actor : Actor) : Set₂ where
   field
-    hasInb : hasInbox store act
-    points : allPointersCorrect store act
+    actor-has-inbox : has-inbox store actor
+    references-have-pointer : all-references-have-a-pointer store actor
 
-inboxRightPointer : Store → Inbox → Set
-inboxRightPointer store inb = Inbox.name inb ↦ Inbox.IS inb ∈e store
+-- To limit references to only those that are valid for the current store,
+-- we have to prove that name in the message points to an inbox of the same
+-- type as the reference.
+-- Value messages are not context sensitive. 
+message-valid : ∀ {IS} → Store → NamedMessage IS → Set
+message-valid store (Value _ _) = ⊤
+message-valid store (Reference {Fw} _ name) = name ↦ Fw ∈e store
 
-messageValid : ∀ {IS} → Store → NamedMessage IS → Set
-messageValid store (Value _ _) = ⊤
-messageValid store (Reference {Fw} _ name) = name ↦ Fw ∈e store
+-- An inbox is valid in a store if all its messages are valid
+all-messages-valid : Store → Inbox → Set₁
+all-messages-valid store inb = All (message-valid store) (Inbox.inbox-messages inb)
 
-allMessagesValid : Store → Inbox → Set₁
-allMessagesValid store inb = All (messageValid store) (Inbox.inb inb)
+-- A store entry is just an inbox without its messages.
+-- We make this distinction so that updating the messages of a store
+-- does not invalidate every pointer into the store.
+inbox-to-store-entry : Inbox → NamedInbox
+inbox-to-store-entry inb = inbox# (Inbox.name inb) [ Inbox.inbox-shape inb ]
 
-inboxToStoreEntry : Inbox → NamedInbox
-inboxToStoreEntry inb = (Inbox.name inb) , (Inbox.IS inb)
+inboxes-to-store : List Inbox → Store
+inboxes-to-store = map inbox-to-store-entry
 
-inboxesToStore : List Inbox → Store
-inboxesToStore = map inboxToStoreEntry
-
+-- A name is unused in a store if every inbox has a name that is < than the name
 NameFresh : Store → ℕ → Set₁
-NameFresh store n = All (λ v → Σ.proj₁ v Data.Nat.< n) store
+NameFresh store n = All (λ v → name v Data.Nat.< n) store
+  where open NamedInbox
 
--- The environment is a list of actors and inboxes, with a proof that every ector is valid in the context of said list of inboxes
---
--- What's missing here is a separation between actors that are running, and actors that are stuck.
--- An actor can become stuck if it is doing a receive but has no messages in its inbox.
--- Actors that become stuck by running to completion should instead just be discarded.
+-- The environment is a list of actors and inboxes,
+-- with a proof that every ector is valid in the context of said list of inboxes
 record Env : Set₂ where
   field
+    -- The currently active actors
     acts : List Actor
+    -- The currently blocked actors, i.e. actors doing receive without any messages in its inbox.
+    -- By separating blocked and non-blocked actors we both optimize the simulation to not try to run
+    -- actors that won't succed in taking a step, and we get a clear step-condition when there are no
+    -- non-blocked actors left.
     blocked : List Actor
-    inbs : List Inbox
+    env-inboxes : List Inbox
     store : Store
-    inbs=store : store ≡ inboxesToStore inbs
-    freshName : Name
-    actorsValid : All (ValidActor store) acts
-    blockedValid : All (ValidActor store) blocked
-    messagesValid : All (allMessagesValid store) inbs
-    nameIsFresh : NameFresh store freshName
+    inbs=store : store ≡ inboxes-to-store env-inboxes
+    -- The proofs that an actor and a blocked actor is valid is actually the same proof,
+    -- but kept in a separate list.
+    actors-valid : All (ValidActor store) acts
+    blocked-valid : All (ValidActor store) blocked
+    messages-valid : All (all-messages-valid store) env-inboxes
+    -- In each environment we keep track of the next fresh name,
+    -- and a proof that the name is not already used in the store.
+    fresh-name : Name
+    name-is-fresh : NameFresh store fresh-name
 
 -- The empty environment
-emptyEnv : Env
-emptyEnv = record
+empty-env : Env
+empty-env = record
              { acts = []
              ; blocked = []
-             ; inbs = []
+             ; env-inboxes = []
              ; store = []
              ; inbs=store = refl
-             ; freshName = 0
-             ; actorsValid = []
-             ; blockedValid = []
-             ; messagesValid = []
-             ; nameIsFresh = []
+             ; fresh-name = 0
+             ; actors-valid = []
+             ; blocked-valid = []
+             ; messages-valid = []
+             ; name-is-fresh = []
              }
 
 -- An environment containing a single actor.
 -- The actor can't have any known references
-singletonEnv : ∀ {IS A ce} → ActorM IS A [] ce → Env
-singletonEnv {IS} {A} {ce} actor = record
+singleton-env : ∀ {IS A post} → ActorM IS A [] post → Env
+singleton-env {IS} {A} {post} actor = record
                        { acts = record
-                                  { IS = IS
+                                  { inbox-shape = IS
                                   ; A = A
                                   ; references = []
-                                  ; es = []
-                                  ; esEqRefs = refl
-                                  ; ce = ce
-                                  ; act = actor
+                                  ; pre = []
+                                  ; pre-eq-refs = refl
+                                  ; post = post
+                                  ; actor-m = actor
                                   ; name = 0
                                   } ∷ []
                        ; blocked = []
-                       ; inbs = record { IS = IS ; inb = [] ; name = 0 } ∷ []
-                       ; store = (0 , IS) ∷ []
+                       ; env-inboxes = record { inbox-shape = IS ; inbox-messages = [] ; name = 0 } ∷ []
+                       ; store = inbox# 0 [ IS ] ∷ []
                        ; inbs=store = refl
-                       ; freshName = 1
-                       ; actorsValid = (record { hasInb = zero ; points = [] }) ∷ []
-                       ; blockedValid = []
-                       ; messagesValid = [] ∷ []
-                       ; nameIsFresh = Data.Nat.s≤s Data.Nat.z≤n ∷ []
+                       ; fresh-name = 1
+                       ; actors-valid = (record { actor-has-inbox = zero ; references-have-pointer = [] }) ∷ []
+                       ; blocked-valid = []
+                       ; messages-valid = [] ∷ []
+                       ; name-is-fresh = Data.Nat.s≤s Data.Nat.z≤n ∷ []
                        }
