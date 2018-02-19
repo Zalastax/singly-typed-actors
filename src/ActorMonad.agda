@@ -31,10 +31,19 @@ record InboxShape : Set₁ where
 _is-value-in_ : Set → InboxShape → Set₁
 A is-value-in S = A ∈ InboxShape.value-types S
 
+record CompatibleReference (R S : InboxShape) : Set₁ where
+  constructor cr[_][v:_][r:_]
+  field
+    {T} : InboxShape
+    receiver-reference : T ∈ InboxShape.reference-types S
+    values-compatible : InboxShape.value-types T ⊆ InboxShape.value-types R
+    references-compatible : InboxShape.reference-types T ⊆ InboxShape.reference-types R
+
+
 -- An inbox shape is a reference type for an inbox of shape S,
 -- if it is an element of the reference-types list for S.
-_is-reference-in_ : InboxShape → InboxShape → Set₁
-R is-reference-in S = R ∈ InboxShape.reference-types S
+_is-compatible-reference-in_ : InboxShape → InboxShape → Set₁
+R is-compatible-reference-in S = CompatibleReference R S
 
 -- We can create a value message for an inbox of shape S,
 -- if the type of the value is a value type for S.
@@ -53,7 +62,7 @@ data ValueMessage (S : InboxShape) : Set₁ where
 --
 -- We index ReferenceMessage by both the reference type and the receiver's inbox.
 data ReferenceMessage (S Fw : InboxShape) : Set₁ where
-  Reference : Fw is-reference-in S → ReferenceMessage S Fw
+  Reference : Fw is-compatible-reference-in S → ReferenceMessage S Fw
 
 -- A Message is either a value or a reference.
 --
@@ -61,7 +70,7 @@ data ReferenceMessage (S Fw : InboxShape) : Set₁ where
 -- but that makes for a noisier experience when pattern matching in application code.
 data Message (S : InboxShape): Set₁ where
   Value : ∀ {A} → A is-value-in S → A → Message S
-  Reference : ∀ {Fw} → Fw is-reference-in S → Message S
+  Reference : ∀ {Fw} → Fw is-compatible-reference-in S → Message S
 
 -- Simple lifting of ⊤ to reduce noise when the monad returns ⊤
 ⊤₁ : Set₁
