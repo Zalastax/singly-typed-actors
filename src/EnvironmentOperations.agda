@@ -341,6 +341,7 @@ mfz-eq .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (here refl) = refl
 mfz-eq {x} .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (there px) = mfz-eq (map shape refs) refs refl px
 
 -- Convert a subset for preconditions to a subset for references
+-- We could maybe use the new branch of stdlib (membership) https://github.com/agda/agda-stdlib/issues/155
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
 lift-references {lss} {gss} subs refs eq = record
                                              { subset-inbox = subs
