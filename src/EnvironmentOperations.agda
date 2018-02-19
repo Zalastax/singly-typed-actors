@@ -2,12 +2,12 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_)
+open import Membership using (_∈_ ; _⊆_ ; map-with-∈)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺ ; drop⁺)
-open import Data.List.Any using (here ; there)
+open import Data.List.Any using (Any ; here ; there)
 open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_)
 open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
@@ -330,9 +330,33 @@ record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbo
 
 open LiftedReferences
 
+my-find-zip : ∀ {x} gss refs → map shape refs ≡ gss → Any (_≡_ x) gss → NamedInbox
+my-find-zip .[] [] refl ()
+my-find-zip .(shape x ∷ map shape refs) (x ∷ refs) refl (here px) = x
+my-find-zip .(shape x ∷ map shape refs) (x ∷ refs) refl (there px) = my-find-zip (map shape refs) refs refl px
+
+mfz-eq : ∀ {x} gss refs → (eq : map shape refs ≡ gss) → (px : Any (_≡_ x) gss) → x ≡ shape (my-find-zip {x} gss refs eq px)
+mfz-eq {x} .[] [] refl ()
+mfz-eq .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (here refl) = refl
+mfz-eq {x} .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (there px) = mfz-eq (map shape refs) refs refl px
+
 -- Convert a subset for preconditions to a subset for references
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references = {!!}
+lift-references {lss} {gss} subs refs eq = record
+                                             { subset-inbox = subs
+                                             ; contained = lssRef
+                                             ; subset = {!!}
+                                             ; contained-eq-inboxes = {!!}
+                                             }
+  where
+    map-lss : ∀ {x} → Any (_≡_ x) lss → NamedInbox
+    map-lss rel = my-find-zip gss refs eq (subs rel)
+    map-lss-eq : ∀ {x} → (px : Any (_≡_ x) lss) → x ≡ shape (map-lss {x} px)
+    map-lss-eq {x} px =  mfz-eq gss refs eq (subs px)
+    lssRef : List NamedInbox
+    lssRef = map-with-∈ lss map-lss
+    lssSubs : lssRef ⊆ refs
+    lssSubs x = {!!}
 {- lift-references [] [] refl = record
                                { subset-inbox = []
                                ; contained = []
