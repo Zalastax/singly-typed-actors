@@ -12,7 +12,7 @@ open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym)
 
--- We give every actor and inbox a name
+-- We give every actor and inbox a name.
 -- The internal type of an actor is not important,
 -- but the type needs to have an easy way of creating
 -- new unique values and an easy way to prove that the name
@@ -31,7 +31,7 @@ record NamedInbox : Set₁ where
     name : Name
     shape : InboxShape
 
--- The store is a list of named inboxes
+-- The store is a list of named inboxes.
 -- This only describes the shape of the store and does not contain any messages.
 -- Making this separation between the shape and the actual storing makes it less
 -- cumbersome to prove that updating an inbox does not invalidate all the pointers into the store.
@@ -59,9 +59,11 @@ a ¬≡ b = ¬[ a ≟ b ]
 -- To create the successor you have to provide a proof that you're not going past the name
 -- you're looking for.
 data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
-  zero : ∀ {xs}            → n ↦ S ∈e (inbox# n [ S ] ∷ xs)
+  zero : ∀ {xs}
+         → n ↦ S ∈e (inbox# n [ S ] ∷ xs)
   suc  : ∀ {n' : Name} { S' xs} {pr : n ¬≡ n'}
-         → n ↦ S ∈e xs → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
+         → n ↦ S ∈e xs
+         → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
 
 -- An ActorM wrapped up with all of its parameters
 -- We use this to be able to store actor monads of different types in the same list.
@@ -69,17 +71,17 @@ data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
 record Actor : Set₂ where
   field
     inbox-shape : InboxShape
-    A : Set₁
+    A           : Set₁
     -- The references are just the preconditions with the name of the actor
     -- of that shape added.
     -- The references are used by the runtime to know which inbox corresponds to
     -- which shape, letting us know which inbox to update when a message is sent.
-    references : List NamedInbox
-    pre : List InboxShape
+    references  : List NamedInbox
+    pre         : ReferenceTypes
     pre-eq-refs : (map NamedInbox.shape references) ≡ pre
-    post : A → List InboxShape
-    actor-m : ActorM inbox-shape A pre post
-    name : Name
+    post        : A → ReferenceTypes
+    actor-m     : ActorM inbox-shape A pre post
+    name        : Name
 
 -- We can look up which inbox a reference refers to when a message is sent.
 -- We can however not add the reference to the actor immediately,
@@ -92,15 +94,15 @@ record Actor : Set₂ where
 -- does not need to be modified when more actors are added.
 data NamedMessage (S : InboxShape): Set₁ where
   Value : ∀ {A} → A is-value-in S → A → NamedMessage S
-  Reference : ∀ {Fw} → Fw ∈ InboxShape.reference-types S → Name → NamedMessage S
+  Reference : ∀ {Fw} → Fw is-reference-in S → Name → NamedMessage S
 
 -- A list of messages, wrapped up with the shape of the messages
 -- Each inbox is given a name, matching those for actors
 record Inbox : Set₂ where
   field
-    inbox-shape : InboxShape
+    inbox-shape    : InboxShape
     inbox-messages : List (NamedMessage inbox-shape)
-    name : Name
+    name           : Name
 
 -- Property that there exists an inbox of the right shape in the list of inboxes
 -- This is used both for proving that every actor has an inbox,
@@ -114,9 +116,9 @@ all-references-have-a-pointer : Store → Actor → Set₁
 all-references-have-a-pointer store actor = All (λ ni → name ni ↦ shape ni ∈e store) (Actor.references actor)
   where open NamedInbox
 
--- An actor is valid in the context 'ls' iff:
--- There is an inbox of the right shape in 'ls'.
--- For every reference in the actor's list of references has an inbox of the right shape in 'ls'
+-- An actor is valid in the context 'store' iff:
+-- There is an inbox of the right shape in 'store'.
+-- For every reference in the actor's list of references has an inbox of the right shape in 'store'
 record ValidActor (store : Store) (actor : Actor) : Set₂ where
   field
     actor-has-inbox : has-inbox store actor
@@ -125,7 +127,7 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
 -- To limit references to only those that are valid for the current store,
 -- we have to prove that name in the message points to an inbox of the same
 -- type as the reference.
--- Value messages are not context sensitive. 
+-- Value messages are not context sensitive.
 message-valid : ∀ {IS} → Store → NamedMessage IS → Set
 message-valid store (Value _ _) = ⊤
 message-valid store (Reference {Fw} _ name) = name ↦ Fw ∈e store

@@ -39,10 +39,10 @@ mutual
   Pongbox .value-types = ℕ ∷ []
   Pongbox .reference-types = Pingbox ∷ []
 
-pingrefs : List InboxShape
+pingrefs : ReferenceTypes
 pingrefs = Pongbox ∷ []
 
-constPingrefs : {A : Set₁} → (A → List InboxShape)
+constPingrefs : {A : Set₁} → (A → ReferenceTypes)
 constPingrefs _ =  pingrefs
 
 pingMainActor : (A : Set₁) → Set₂
@@ -70,10 +70,10 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
       { (lift false) → ♯ ( (here refl !v Value (here refl) n) >>= λ _ → pingMain (suc n))
       ; (lift true) → return _}))
 
-pongrefs : List InboxShape
+pongrefs : ReferenceTypes
 pongrefs = Pingbox ∷ []
 
-constPongrefs : {A : Set₁} → (A → List InboxShape)
+constPongrefs : {A : Set₁} → (A → ReferenceTypes)
 constPongrefs _ = pongrefs
 
 pongMainActor : (A : Set₁) → Set₂
@@ -106,4 +106,3 @@ spawner = spawn ponger >>= λ _ →
           ♯ (spawn pinger >>= λ _ →
           ♯ (to here refl !r Reference (here refl) via there (here refl) >>= λ _ →
           to there (here refl) !r Reference (here refl) via here refl))
-

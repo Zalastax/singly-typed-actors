@@ -38,7 +38,7 @@ new-actor {IS} {A} {post} m name = record
                                         }
 
 -- An actor can be lifted to run sub-programs that need less references
-lift-actor : (actor : Actor) → {pre : List InboxShape} → (references : List NamedInbox) →
+lift-actor : (actor : Actor) → {pre : ReferenceTypes} → (references : List NamedInbox) →
               (pre-eq-refs : (map shape references) ≡ pre) →
               ActorM (inbox-shape actor) (A actor) pre (post actor) → Actor
 lift-actor actor {pre} references pre-eq-refs m = record
@@ -316,12 +316,12 @@ record FoundReference (store : Store) (S : InboxShape) : Set₂ where
 lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
 lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
   where
-    loop : (pre : List InboxShape) → (refs : List NamedInbox) → (All (λ ni → name ni ↦ shape ni ∈e store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
+    loop : (pre : ReferenceTypes) → (refs : List NamedInbox) → (All (λ ni → name ni ↦ shape ni ∈e store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
     loop .[] [] prfs refl ()
     loop _ (inbox# name [ IS ] ∷ refs) (reference ∷ prfs) refl (here refl) = record { name = name ; reference = reference }
     loop _ (x ∷ refs) (px ∷ prfs) refl (there ref) = loop _ refs prfs refl ref
 
-record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbox) : Set₂ where
+record LiftedReferences (lss gss : ReferenceTypes) (references : List NamedInbox) : Set₂ where
   field
     subset-inbox : lss ⊆ gss
     contained : List NamedInbox

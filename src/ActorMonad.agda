@@ -21,11 +21,14 @@ open import Level using (Lift ; lift ; suc ; zero)
 --
 -- Values and references are kept separate,
 --  since the sending and receiving of values have different behaviour from sending and receiving references.
-record InboxShape : Set₁ where
-  coinductive
-  field
-    value-types : List Set
-    reference-types : List InboxShape
+mutual
+  record InboxShape : Set₁ where
+    coinductive
+    field
+      value-types : List Set
+      reference-types : ReferenceTypes
+
+  ReferenceTypes = List InboxShape
 
 -- A type is a value type for an inbox of shape S,
 -- if it is an element of the value-types list for S.
@@ -69,7 +72,7 @@ data Message (S : InboxShape): Set₁ where
 ⊤₁ = Lift ⊤
 
 -- When a message is received, we increase our capabilities iff the message is a reference.
-add-if-reference : ∀ {S} → List InboxShape → Message S → List InboxShape
+add-if-reference : ∀ {S} → ReferenceTypes → Message S → ReferenceTypes
 add-if-reference pre (Value _ _) = pre
 add-if-reference pre (Reference {Fw} _) = Fw ∷ pre
 
@@ -78,7 +81,7 @@ infixl 1 _>>=_
 -- An Actor is modeled as a monad.
 --
 -- It is indexed by the shape of its inbox, which can't change over the course of its life-time.
--- 
+--
 --
 -- 'A' is the return value of the monad.
 --
@@ -94,8 +97,8 @@ infixl 1 _>>=_
 -- and is thus modelled as a function on 'A'.
 -- 'post' is what enables receive to have the right type.
 data ActorM (IS : InboxShape) : (A : Set₁) →
-              (pre : List InboxShape) →
-              (post : A → List InboxShape) →
+              (pre : ReferenceTypes) →
+              (post : A → ReferenceTypes) →
               Set₂ where
   -- Value is also known as return.
   -- The precondition is the same as the assignment axiom schema in Hoare logic.
@@ -116,7 +119,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- A value can only be sent to an actor if a reference to it is
   -- available in the precondition.
   -- ValueMessage is indexed by the shape of the inbox we're sending to,
-  -- which makes sure that it's not possible to send values of the wrong type. 
+  -- which makes sure that it's not possible to send values of the wrong type.
   SendValue : ∀ {pre} → {ToIS : InboxShape} →
     (canSendTo : ToIS ∈ pre) →
     (msg : ValueMessage ToIS) →
