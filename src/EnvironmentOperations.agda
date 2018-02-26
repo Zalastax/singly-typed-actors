@@ -23,6 +23,9 @@ open ValidActor
 open Env
 open NamedInbox
 
+no-comm : Env → Env → Set₂
+no-comm e1 e2 = Env.env-inboxes e1 ≡ Env.env-inboxes e2
+
 -- We can create a new Actor from an ActorM if we know its name.
 -- This is used when spawning an actor.
 new-actor : ∀ {IS A post} → ActorM IS A [] post → Name → Actor
@@ -162,9 +165,8 @@ top-actor-to-back env | x ∷ acts | (y ∷ prfs) = record
 -- This is used when handling some monadic operations, when there is no following bind.
 -- The dropped actor is not put in the blocked list.
 drop-top-actor : Env → Env
-drop-top-actor env with (acts env) | (actors-valid env)
-drop-top-actor env | [] | prfs = env
-drop-top-actor env | _ ∷ rest | _ ∷ prfs = record
+drop-top-actor env@(record { acts = [] }) = env
+drop-top-actor env@(record { acts = _ ∷ rest ; actors-valid = _ ∷ prfs }) = record
                                   { acts = rest
                                   ; blocked = blocked env
                                   ; env-inboxes = env-inboxes env
@@ -176,6 +178,10 @@ drop-top-actor env | _ ∷ rest | _ ∷ prfs = record
                                   ; messages-valid = messages-valid env
                                   ; name-is-fresh = name-is-fresh env
                                   }
+
+drop-top-actor-no-comm : (env : Env) → no-comm env (drop-top-actor env)
+drop-top-actor-no-comm record { acts = [] ; env-inboxes = env-inboxes } = refl
+drop-top-actor-no-comm record { acts = _ ∷ _ ; actors-valid = _ ∷ _ } = refl
 
 -- convert < to ¬≡
 <-¬≡ : ∀ {n m} → n < m → n ¬≡ m
