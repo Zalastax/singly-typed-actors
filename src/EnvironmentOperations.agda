@@ -2,7 +2,7 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; map-with-∈)
+open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -313,6 +313,7 @@ record FoundReference (store : Store) (S : InboxShape) : Set₂ where
     reference : name ↦ S ∈e store
 
 -- looks up the pointer for one of the references known by an actor
+{-
 lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
 lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
   where
@@ -320,6 +321,7 @@ lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.referen
     loop .[] [] prfs refl ()
     loop _ (inbox# name [ IS ] ∷ refs) (reference ∷ prfs) refl (here refl) = record { name = name ; reference = reference }
     loop _ (x ∷ refs) (px ∷ prfs) refl (there ref) = loop _ refs prfs refl ref
+-}
 
 record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbox) : Set₂ where
   field
@@ -330,34 +332,30 @@ record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbo
 
 open LiftedReferences
 
-my-find-zip : ∀ {x} gss refs → map shape refs ≡ gss → Any (_≡_ x) gss → NamedInbox
-my-find-zip .[] [] refl ()
-my-find-zip .(shape x ∷ map shape refs) (x ∷ refs) refl (here px) = x
-my-find-zip .(shape x ∷ map shape refs) (x ∷ refs) refl (there px) = my-find-zip (map shape refs) refs refl px
-
-mfz-eq : ∀ {x} gss refs → (eq : map shape refs ≡ gss) → (px : Any (_≡_ x) gss) → x ≡ shape (my-find-zip {x} gss refs eq px)
-mfz-eq {x} .[] [] refl ()
-mfz-eq .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (here refl) = refl
-mfz-eq {x} .(shape x₁ ∷ map shape refs) (x₁ ∷ refs) refl (there px) = mfz-eq (map shape refs) refs refl px
-
 -- Convert a subset for preconditions to a subset for references
--- We could maybe use the new branch of stdlib (membership) https://github.com/agda/agda-stdlib/issues/155
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references {lss} {gss} subs refs eq = record
-                                             { subset-inbox = subs
-                                             ; contained = lssRef
-                                             ; subset = {!!}
-                                             ; contained-eq-inboxes = {!!}
+lift-references SubNil refs refl = record
+                                     { subset-inbox = SubNil
+                                     ; contained = []
+                                     ; subset = SubNil
+                                     ; contained-eq-inboxes = refl
+                                     }
+lift-references (InList {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
+... | q  = record
+                                             { subset-inbox = InList x₁ subs
+                                             ; contained = (lookup-parallel x₁ refs shape refl) ∷ contained q
+                                             ; subset = InList (translate-∈ x₁ refs shape refl) (subset q)
+                                             ; contained-eq-inboxes = combine y (shape (lookup-parallel x₁ refs shape refl)) xs (map shape (contained q)) contained-el-ok (contained-eq-inboxes q)
                                              }
   where
-    map-lss : ∀ {x} → Any (_≡_ x) lss → NamedInbox
-    map-lss rel = my-find-zip gss refs eq (subs rel)
-    map-lss-eq : ∀ {x} → (px : Any (_≡_ x) lss) → x ≡ shape (map-lss {x} px)
-    map-lss-eq {x} px =  mfz-eq gss refs eq (subs px)
-    lssRef : List NamedInbox
-    lssRef = map-with-∈ lss map-lss
-    lssSubs : lssRef ⊆ refs
-    lssSubs x = {!!}
+    contained-el : NamedInbox
+    contained-el = lookup-parallel x₁ refs shape refl
+    contained-el-shape = shape contained-el
+    contained-el-ok : y ≡ contained-el-shape
+    contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
+    combine : (a b : InboxShape) → (as bs : List InboxShape) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
+    combine a .a as .as refl refl = refl
+
 {- lift-references [] [] refl = record
                                { subset-inbox = []
                                ; contained = []
