@@ -5,11 +5,14 @@ open import Data.List
 open import Data.List.Any using ()
 open import Data.List.All using (All ; [] ; _∷_)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-
+open import Data.Empty using (⊥)
 
 data _∈_ {a} {A : Set a} : A → (List A) -> Set a where
   Z : ∀ {x xs} → x ∈ (x ∷ xs)
   S : ∀ {x y xs} → x ∈ xs -> x ∈ (y ∷ xs)
+
+x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
+x∈[]-⊥ ()
 
 data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
   SubNil : ∀ {xs} → [] ⊆ xs
@@ -23,7 +26,6 @@ translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} → (ls ⊆ ks) →
 translate-⊆ SubNil ()
 translate-⊆ (InList x₂ subs) Z = x₂
 translate-⊆ (InList x₂ subs) (S px) = translate-⊆ subs px
-
 
 lookup-parallel : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} → x ∈ gss → (refs : List B) → (f : B → A) → map f refs ≡ gss → B
 lookup-parallel Z [] f ()
@@ -43,6 +45,10 @@ translate-∈ (S px) [] f ()
 translate-∈ Z (x ∷ refs) f refl = Z
 translate-∈ (S px) (x ∷ refs) f refl = S (translate-∈ px refs f refl)
 
+lookup-all : ∀ {a p} {A : Set a} {P : A → Set p} {ls : List A} {x : A} → x ∈ ls → All P ls → P x
+lookup-all Z (px ∷ pxs) = px
+lookup-all (S px) (px₁ ∷ pxs) = lookup-all px pxs
+
 All-⊆ : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys} → xs ⊆ ys → All P ys → All P xs
 All-⊆ {xs = []} {ys} subs pys = []
-All-⊆ {xs = x ∷ xs} {ys} (InList x₁ subs) pys = {!!}
+All-⊆ (InList x₁ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
