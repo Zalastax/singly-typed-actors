@@ -1,6 +1,6 @@
 module Simulate where
 
-open import Membership using (_∈_ ; _⊆_ ; All-⊆)
+open import Membership using (_∈_ ; _⊆_ ; All-⊆ ; translate-⊆)
 open import ActorMonad public
 open import SimulationEnvironment
 open import EnvironmentOperations
@@ -11,6 +11,7 @@ open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀
 open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_ ; s≤s)
 open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Unit using (⊤ ; tt)
+open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
 
@@ -51,6 +52,9 @@ open LiftedReferences
 open UpdatedInboxes
 open ValidMessageList
 open NamedInbox
+open _comp↦_∈_
+open [_]-handles-all-of-[_]
+open [_]-is-super-reference-in-[_]
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.
@@ -90,7 +94,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- We need to use the associativity law to 'free' the left-most part so that
 -- it can be run just one step.
 -- The simulation will keep shifting parantheses until it eventually reaches
--- a part that is not a bind inside a bind. 
+-- a part that is not a bind inside a bind.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= g |
   mm >>= f = keep-simulating (Bind (BindDouble (name actor))) env'
   where
@@ -135,9 +139,9 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
       actor-has-inbox = suc {pr =
         suc-helper (actor-has-inbox valid) (name-is-fresh env)
         } (actor-has-inbox valid)
-      ; references-have-pointer = zero ∷ ∀map (λ x₁ → suc {pr =
-        suc-helper x₁ (name-is-fresh env)
-        } x₁) (references-have-pointer valid) }
+      ; references-have-pointer = [p: zero ][handles: handles-self ] ∷ ∀map
+                                      (λ p → suc-p (suc-helper (actual-has-pointer p) (name-is-fresh env)) p)
+                                      (references-have-pointer valid) }
     env' : Env
     env' = record
              { acts = newAct ∷ bindAct ∷ rest
@@ -162,7 +166,9 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- unblocks it and moves it to the actor queue.
 -- The unblocked actor is put in the back of the round-robin queue.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
-  SendValue {ToIS = ToIS} canSendTo (Value x a) = keep-simulating (Bind (SendValue (name actor) (name foundTo))) withUnblocked
+  SendValue {ToIS = ToIS} canSendTo (Value x a) = keep-simulating
+                                                  (Bind (SendValue (name actor) (name foundTo)))
+                                                  withUnblocked
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference valid canSendTo
@@ -171,7 +177,9 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env withM (reference foundTo) (add-message (Value x a) _)
+    withUpdatedInbox = update-inbox-env withM
+                       (underlying-pointer foundTo)
+                       (add-message (Value (translate-value-pointer foundTo x) a) _)
     withUnblocked : Env
     withUnblocked = unblock-actor withUpdatedInbox (name foundTo)
 -- ===== Bind send reference =====
@@ -194,7 +202,9 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- unblocks it and moves it to the actor queue.
 -- The unblocked actor is put in the back of the round-robin queue.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
-  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keep-simulating (Bind (SendReference (name actor) (name foundTo) (name foundFw))) withUnblocked
+  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keep-simulating
+                                                                                 (Bind (SendReference (name actor) (name foundTo) (name foundFw)))
+                                                                                 withUnblocked
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference valid canSendTo
@@ -205,7 +215,10 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env withM (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
+    withUpdatedInbox = update-inbox-env withM
+                     (underlying-pointer foundTo)
+                     (add-message (Reference (translate-reference-pointer foundTo (wanted-is-reference x))
+                     (name foundFw)) (make-pointers-compatible x foundTo foundFw))
     withUnblocked : Env
     withUnblocked = unblock-actor withUpdatedInbox (name foundTo)
 -- ===== Bind receive =====
@@ -257,7 +270,9 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                          ; store = store env
                                          ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
                                          ; fresh-name = fresh-name env
-                                         ; actors-valid = record { actor-has-inbox = actor-has-inbox valid ; references-have-pointer = px ∷ references-have-pointer valid } ∷ restValid
+                                         ; actors-valid = record {
+                                           actor-has-inbox = actor-has-inbox valid
+                                           ; references-have-pointer = px ∷ references-have-pointer valid } ∷ restValid
                                          ; blocked-valid = blocked-valid env
                                          ; messages-valid = inboxes-valid inboxesAfter
                                          ; name-is-fresh = name-is-fresh env
@@ -290,7 +305,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindAct = add-reference actor (inbox# name actor [ inbox-shape actor ]) (♭ (f _))
     bindActValid : ValidActor (store env) bindAct
     bindActValid = record { actor-has-inbox = actor-has-inbox valid
-                          ; references-have-pointer = actor-has-inbox valid ∷ references-have-pointer valid }
+                          ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: handles-self ] ∷ references-have-pointer valid }
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
 -- ===== Spawn =====
@@ -303,14 +318,16 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- ===== Send value =====
 -- Send value without a following bind.
 -- Very similar to send value with a following bind,
--- but we also drop the actor that sent the value.
+  -- but we also drop the actor that sent the value.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   SendValue {ToIS = ToIS} canSendTo (Value x a ) = keep-simulating (SendValue (name actor) (name foundTo)) withUnblocked
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference valid canSendTo
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env env (reference foundTo) (add-message (Value x a) _)
+    withUpdatedInbox = update-inbox-env env
+                     (underlying-pointer foundTo)
+                     (add-message (Value (translate-value-pointer foundTo x) a) _)
     withTopDropped : Env
     withTopDropped = drop-top-actor withUpdatedInbox
     withUnblocked : Env
@@ -320,14 +337,19 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- Very similar to send reference with a following bind,
 -- but we also drop the actor that sent the value.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
-  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keep-simulating (SendReference (name actor) (name foundTo) (name foundFw)) withUnblocked
+  SendReference {ToIS = ToIS} {FwIS = FwIS} canSendTo canForward (Reference x) = keep-simulating
+                                                                                 (SendReference (name actor) (name foundTo) (name foundFw))
+                                                                                 withUnblocked
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference valid canSendTo
     foundFw : FoundReference (store env) FwIS
     foundFw = lookup-reference valid canForward
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env env (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
+    withUpdatedInbox = update-inbox-env env
+                     (underlying-pointer foundTo)
+                     (add-message (Reference (translate-reference-pointer foundTo (wanted-is-reference x)) (name foundFw))
+                     (make-pointers-compatible x foundTo foundFw))
     withTopDropped : Env
     withTopDropped = drop-top-actor withUpdatedInbox
     withUnblocked : Env
@@ -338,7 +360,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- We could remve the message in the inbox,
 -- but there is currently no proofs that care about doing so.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
-  Receive = keep-simulating (Receive (name actor) Dropped) (drop-top-actor env) 
+  Receive = keep-simulating (Receive (name actor) Dropped) (drop-top-actor env)
 -- ===== Lift =====
 -- Just performs the lifting by translating a subset for preconditions
 -- to a subset for references.
@@ -350,7 +372,10 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
     bxLifted : Actor
     bxLifted = lift-actor actor (contained liftedRefs) (sym (contained-eq-inboxes liftedRefs)) bx
     bxValid : ValidActor (store env) bxLifted
-    bxValid = record { actor-has-inbox = actor-has-inbox valid ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid) }
+    bxValid = record {
+      actor-has-inbox = actor-has-inbox valid
+      ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid)
+      }
     env' : Env
     env' = replace-actors env (bxLifted ∷ rest) (bxValid ∷ restValid)
 -- Self without a following bind is like return,

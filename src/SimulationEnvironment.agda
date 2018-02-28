@@ -65,6 +65,14 @@ data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
          → n ↦ S ∈e xs
          → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
 
+
+record _comp↦_∈_ (n : Name) (wanted : InboxShape) (store : Store) : Set₁ where
+  constructor [p:_][handles:_]
+  field
+    {actual} : InboxShape
+    actual-has-pointer : n ↦ actual ∈e store
+    actual-handles-wanted : [ actual ]-handles-all-of-[ wanted ]
+
 -- An ActorM wrapped up with all of its parameters
 -- We use this to be able to store actor monads of different types in the same list.
 -- We give each actor a name so that we can find its inbox in the store.
@@ -110,10 +118,14 @@ record Inbox : Set₂ where
 has-inbox : Store → Actor → Set
 has-inbox store actor = Actor.name actor ↦ Actor.inbox-shape actor ∈e store
 
+reference-has-pointer : Store → NamedInbox → Set₁
+reference-has-pointer store ni = name ni comp↦ shape ni ∈ store
+  where open NamedInbox
+
 -- Property that for every shape, there exists an inbox of that shape.
 -- Used for proving that every reference known by an actor has an inbox.
 all-references-have-a-pointer : Store → Actor → Set₁
-all-references-have-a-pointer store actor = All (λ ni → name ni ↦ shape ni ∈e store) (Actor.references actor)
+all-references-have-a-pointer store actor = All (reference-has-pointer store) (Actor.references actor)
   where open NamedInbox
 
 -- An actor is valid in the context 'store' iff:
@@ -128,9 +140,9 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
 -- we have to prove that name in the message points to an inbox of the same
 -- type as the reference.
 -- Value messages are not context sensitive.
-message-valid : ∀ {IS} → Store → NamedMessage IS → Set
-message-valid store (Value _ _) = ⊤
-message-valid store (Reference {Fw} _ name) = name ↦ Fw ∈e store
+message-valid : ∀ {IS} → Store → NamedMessage IS → Set₁
+message-valid store (Value _ _) = ⊤₁
+message-valid store (Reference {Fw} _ name) = name comp↦ Fw ∈ store
 
 -- An inbox is valid in a store if all its messages are valid
 all-messages-valid : Store → Inbox → Set₁

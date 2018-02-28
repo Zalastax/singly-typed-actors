@@ -1,5 +1,5 @@
 module ActorMonad where
-open import Membership using (_∈_ ; _⊆_)
+open import Membership using (_∈_ ; _⊆_ ; xs⊆xs)
 
 open import Data.List using (List ; [] ; _∷_)
 open import Data.Unit using (⊤ ; tt)
@@ -24,10 +24,11 @@ mutual
   record InboxShape : Set₁ where
     coinductive
     field
-      value-types : List Set
+      value-types : ValueTypes
       reference-types : ReferenceTypes
 
   ReferenceTypes = List InboxShape
+  ValueTypes = List Set
 
 -- A type is a value type for an inbox of shape S,
 -- if it is an element of the value-types list for S.
@@ -38,6 +39,22 @@ A is-value-in S = A ∈ InboxShape.value-types S
 -- if it is an element of the reference-types list for S.
 _is-reference-in_ : InboxShape → InboxShape → Set₁
 R is-reference-in S = R ∈ InboxShape.reference-types S
+
+-- An inbox shape can be used in place of another if
+-- it accepts every value and reference of the other.
+record [_]-handles-all-of-[_] (actual wanted : InboxShape) : Set₁ where
+  field
+    values-sub : InboxShape.value-types wanted ⊆ InboxShape.value-types actual
+    references-sub : InboxShape.reference-types wanted ⊆ InboxShape.reference-types actual
+
+-- A reference can be used in place of another reference in S if
+-- it accepts every value and reference of the other,
+-- and of course, the other has to be in S  
+record [_]-is-super-reference-in-[_] (Fw S : InboxShape) : Set₁ where
+  field
+    {wanted} : InboxShape
+    wanted-is-reference : wanted is-reference-in S
+    fw-handles-wanted : [ Fw ]-handles-all-of-[ wanted ]
 
 -- We can create a value message for an inbox of shape S,
 -- if the type of the value is a value type for S.
@@ -56,7 +73,7 @@ data ValueMessage (S : InboxShape) : Set₁ where
 --
 -- We index ReferenceMessage by both the reference type and the receiver's inbox.
 data ReferenceMessage (S Fw : InboxShape) : Set₁ where
-  Reference : Fw is-reference-in S → ReferenceMessage S Fw
+  Reference : [ Fw ]-is-super-reference-in-[ S ] → ReferenceMessage S Fw
 
 -- A Message is either a value or a reference.
 --
@@ -192,3 +209,7 @@ to canSendTo !r msg via canForward = ♯ SendReference canSendTo canForward msg
 -- coinduction helper for Receive
 receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-if-reference pre))
 receive = ♯ Receive
+
+-- An inbox can handle every value and reference of itself
+handles-self : {IS : InboxShape} → [ IS ]-handles-all-of-[ IS ]
+handles-self = record { values-sub = xs⊆xs ; references-sub = xs⊆xs }

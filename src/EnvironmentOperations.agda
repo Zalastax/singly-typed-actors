@@ -2,7 +2,7 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥)
+open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; xs⊆xs ; translate-⊆ ; ⊆-trans)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -202,18 +202,27 @@ suc-helper : ∀ {store name IS n} →
 suc-helper zero (px ∷ p) = <-¬≡ px
 suc-helper (suc q) (px ∷ p) = suc-helper q p
 
+suc-p : ∀ {store name n x shape} → ¬[ name ≟ n ] → name comp↦ shape ∈ store → name comp↦ shape ∈ (inbox# n [ x ] ∷ store)
+suc-p pr [p: actual-has-pointer ][handles: actual-handles-wanted ] = [p: (suc {pr = pr} actual-has-pointer) ][handles: actual-handles-wanted ]
+
 -- An actor is still valid if we add a new inbox to the store, as long as that name is not used in the store before
 valid-actor-suc : ∀ {store actor n x} → (NameFresh store n) → ValidActor store actor → ValidActor (inbox# n [ x ] ∷ store) actor
-valid-actor-suc frsh va = record { actor-has-inbox = suc {pr = suc-helper (ValidActor.actor-has-inbox va) frsh} (ValidActor.actor-has-inbox va) ; references-have-pointer = ∀map (λ p → suc {pr = suc-helper p frsh} p) (ValidActor.references-have-pointer va) }
+valid-actor-suc frsh va = record {
+  actor-has-inbox = suc {pr = suc-helper (actor-has-inbox va) frsh} (actor-has-inbox va)
+  ; references-have-pointer = ∀map (λ p → suc-p (suc-helper (actual-has-pointer p) frsh) p) (references-have-pointer va) } -- suc-p (suc-helper p frsh) p
+  where
+    open ValidActor
+    open _comp↦_∈_
 
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
 messages-valid-suc : ∀ {store inb n x} → (NameFresh store n) → all-messages-valid store inb → all-messages-valid (inbox# n [ x ] ∷ store) inb
 messages-valid-suc {store} {inb} {n} {x} frsh vi = ∀map msgValidSuc vi
   where
+    open _comp↦_∈_
     msgValidSuc : {x₁ : NamedMessage (Inbox.inbox-shape inb)} →
                   message-valid store x₁ → message-valid (inbox# n [ x ] ∷ store) x₁
-    msgValidSuc {x₁ = Value _ _} mv = tt
-    msgValidSuc {x₁ = Reference _ _} mv = suc {pr = suc-helper mv frsh} mv
+    msgValidSuc {x₁ = Value _ _} mv = _
+    msgValidSuc {x₁ = Reference _ _} mv = suc-p (suc-helper (actual-has-pointer mv) frsh) mv --  {pr = suc-helper mv frsh} mv
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
@@ -311,18 +320,64 @@ unblock-actor env name = newEnv (loop (blocked env) (blocked-valid env))
 record FoundReference (store : Store) (S : InboxShape) : Set₂ where
   field
     name : Name
-    reference : name ↦ S ∈e store
+    reference : name comp↦ S ∈ store
 
 -- looks up the pointer for one of the references known by an actor
 lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
 lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
   where
-    loop : (pre : ReferenceTypes) → (refs : List NamedInbox) → (All (λ ni → name ni ↦ shape ni ∈e store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
+    loop : (pre : ReferenceTypes) → (refs : List NamedInbox) → (All (reference-has-pointer store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
     loop [] refs prfs eq ()
     loop _ [] prfs () Z
     loop _ [] prfs () (S px)
     loop _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record { name = name ; reference = reference }
     loop _ (x ∷ refs) (px₁ ∷ prfs) refl (S px) = loop _ refs prfs refl px
+
+open _comp↦_∈_
+open FoundReference
+open [_]-is-super-reference-in-[_]
+open [_]-handles-all-of-[_]
+
+-- Extract the found pointer
+underlying-pointer : ∀ {IS store} → (ref : FoundReference store IS) → (name ref ↦ actual (reference ref) ∈e store )
+underlying-pointer ref = actual-has-pointer (reference ref)
+
+-- lookup of value pointers
+translate-value-pointer : ∀ {ToIS} {A} {store}
+  (w : FoundReference store ToIS) →
+  A ∈ InboxShape.value-types ToIS →
+  A ∈ InboxShape.value-types (actual (reference w))
+translate-value-pointer w x = translate-⊆ (values-sub (actual-handles-wanted (reference w))) x
+  where open [_]-handles-all-of-[_]
+
+-- lookup of reference pointers
+translate-reference-pointer : ∀ {ToIS A store} →
+  (w : FoundReference store ToIS) →
+  A ∈ InboxShape.reference-types ToIS →
+  A ∈ InboxShape.reference-types (actual (reference w))
+translate-reference-pointer w x = translate-⊆ (references-sub (actual-handles-wanted (reference w))) x
+
+compatible-handles : ∀ {ToIS FwIS store} →
+  (x : [ FwIS ]-is-super-reference-in-[ ToIS ]) →
+  FoundReference store ToIS →
+  (foundFw : FoundReference store FwIS) →
+  [ actual (reference foundFw) ]-handles-all-of-[ wanted x ]
+compatible-handles x foundTo foundFw with (actual-handles-wanted (reference foundFw))
+... | b with (values-sub b)
+... | c with (fw-handles-wanted x)
+... | d with (values-sub d)
+... | e = record {
+  values-sub = ⊆-trans (values-sub d) (values-sub b)
+  ; references-sub = ⊆-trans (references-sub d) (references-sub b)
+  }
+
+make-pointers-compatible : ∀ {ToIS FwIS store} →
+  (x : [ FwIS ]-is-super-reference-in-[ ToIS ]) →
+  FoundReference store ToIS →
+  (foundFw : FoundReference store FwIS) →
+  name foundFw comp↦ wanted x ∈ store
+make-pointers-compatible x foundTo foundFw = [p: (actual-has-pointer (reference foundFw)) ][handles: compatible-handles x foundTo foundFw ]
+
 
 record LiftedReferences (lss gss : ReferenceTypes) (references : List NamedInbox) : Set₂ where
   field

@@ -1,3 +1,4 @@
+{-# OPTIONS --allow-unsolved-metas #-}
 module Membership where
 -- open import Data.List.Any.Membership.Propositional public
 
@@ -17,6 +18,15 @@ x∈[]-⊥ ()
 data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
   SubNil : ∀ {xs} → [] ⊆ xs
   InList : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
+
+⊆-suc : ∀ {a} {A : Set a} {y : A} {xs ys : List A} → xs ⊆ ys → xs ⊆ (y ∷ ys)
+⊆-suc SubNil = SubNil
+⊆-suc (InList x₁ subs) = InList (S x₁) (⊆-suc subs)
+
+xs⊆xs : ∀ {a} {A : Set a} {xs : List A} → xs ⊆ xs
+xs⊆xs {xs = []} = SubNil
+xs⊆xs {xs = x ∷ xs} = InList Z (⊆-suc xs⊆xs)
+
 
 lookup-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
 lookup-∈ {ls = x ∷ xs} Z = x
@@ -52,3 +62,7 @@ lookup-all (S px) (px₁ ∷ pxs) = lookup-all px pxs
 All-⊆ : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys} → xs ⊆ ys → All P ys → All P xs
 All-⊆ {xs = []} {ys} subs pys = []
 All-⊆ (InList x₁ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
+
+⊆-trans : ∀ {a} {A : Set a} {as bs cs : List A} → as ⊆ bs → bs ⊆ cs → as ⊆ cs
+⊆-trans SubNil _ = SubNil
+⊆-trans (InList x₁ asbs) bscs = InList (translate-⊆ bscs x₁) (⊆-trans asbs bscs)

@@ -8,7 +8,7 @@ open import Coinduction
 open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; InList ; SubNil)
+open import Membership using (_∈_ ; _⊆_ ; S ; Z ; InList ; SubNil ; xs⊆xs)
 open import Data.Unit using (⊤ ; tt)
 
 open InboxShape
@@ -35,9 +35,13 @@ mutual
   Pingbox .value-types = Bool ∷ []
   Pingbox .reference-types = Pongbox ∷ []
 
+  PingNoRef : InboxShape
+  PingNoRef .value-types = Bool ∷ []
+  PingNoRef .reference-types = []
+
   Pongbox : InboxShape
   Pongbox .value-types = ℕ ∷ []
-  Pongbox .reference-types = Pingbox ∷ []
+  Pongbox .reference-types = PingNoRef ∷ []
 
 pingrefs : ReferenceTypes
 pingrefs = Pongbox ∷ []
@@ -71,7 +75,7 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
       ; (lift true) → return _}))
 
 pongrefs : ReferenceTypes
-pongrefs = Pingbox ∷ []
+pongrefs = PingNoRef ∷ []
 
 constPongrefs : {A : Set₁} → (A → ReferenceTypes)
 constPongrefs _ = pongrefs
@@ -103,6 +107,8 @@ ponger = loopTillPing >>= λ _ → ♯ ((Z !v Value Z false) >>= λ _ → pongMa
 spawner : ActorM Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ Pongbox ∷ [])
 spawner = spawn ponger >>= λ _ →
           ♯ (spawn pinger >>= λ _ →
-          ♯ (to Z !r Reference Z via S Z >>= λ _ →
-          to S Z !r Reference Z via Z))
+          ♯ (to Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted =  handles-self }) via S Z >>= λ _ →
+          to S Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted = record { values-sub = xs⊆xs; references-sub = SubNil } }) via Z))
+  where
+    open [_]-handles-all-of-[_]
 
