@@ -11,7 +11,7 @@ in a style inspired by Effects from Idris and Koen Claessen's Poor Man's Concurr
 | Dependency       | Version                                  |
 |------------------|------------------------------------------|
 | Agda             | 2.5.3                                    |
-| standard-library | f6ae4f7ffe70e9f3f9c028fe341f7af91439d3a3 |
+| standard-library | 27182f8b24f0493a184e5ee82b285d18c61d6a37 |
 
 | File                  | Description                                              |
 |-----------------------|----------------------------------------------------------|
