@@ -1,6 +1,6 @@
 module Simulate where
 
-open import Membership using (_∈_ ; _⊆_ ; All-⊆)
+open import Membership using (_∈_ ; _⊆_ ; All-⊆ ; translate-⊆)
 open import ActorMonad public
 open import SimulationEnvironment
 open import EnvironmentOperations
@@ -51,6 +51,9 @@ open LiftedReferences
 open UpdatedInboxes
 open ValidMessageList
 open NamedInbox
+open [_]-handles-all-of-[_]
+open [_]-is-super-reference-in-[_]
+open _comp↦_∈_
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.
@@ -135,9 +138,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
       actor-has-inbox = suc {pr =
         suc-helper (actor-has-inbox valid) (name-is-fresh env)
         } (actor-has-inbox valid)
-      ; references-have-pointer = zero ∷ ∀map (λ x₁ → suc {pr =
-        suc-helper x₁ (name-is-fresh env)
-        } x₁) (references-have-pointer valid) }
+      ; references-have-pointer = [p: zero ][handles: handles-self ] ∷ ∀map (λ { [p: p ][handles: handles ] → [p: (suc {pr = suc-helper p (name-is-fresh env)} p) ][handles: handles ]}) (references-have-pointer valid) }
     env' : Env
     env' = record
              { acts = newAct ∷ bindAct ∷ rest
@@ -171,7 +172,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env withM (reference foundTo) (add-message (Value x a) _)
+    withUpdatedInbox = update-inbox-env withM {!!} (add-message (Value x a) _) -- (reference foundTo)
     withUnblocked : Env
     withUnblocked = unblock-actor withUpdatedInbox (name foundTo)
 -- ===== Bind send reference =====
@@ -205,7 +206,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env withM (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
+    withUpdatedInbox = update-inbox-env withM {!!} (add-message (Reference x (name foundFw)) {!!}) -- (reference foundTo) -- (reference foundFw)
     withUnblocked : Env
     withUnblocked = unblock-actor withUpdatedInbox (name foundTo)
 -- ===== Bind receive =====
@@ -251,13 +252,15 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                       }
     -- If the next message is a reference, add the reference to the index, and apply the message to f
     env' record { messages = Reference {Fw} x fwName ∷ _ ; valid = px ∷ _ } = record
-                                         { acts = add-reference actor inbox# fwName [ Fw ] (♭ (f (Reference x))) ∷ rest
+                                         { acts = add-reference actor inbox# fwName [ {!!} ] (♭ (f (Reference {! ?!}))) ∷ rest
                                          ; blocked = blocked env
                                          ; env-inboxes = updated-inboxes inboxesAfter
                                          ; store = store env
                                          ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
                                          ; fresh-name = fresh-name env
-                                         ; actors-valid = record { actor-has-inbox = actor-has-inbox valid ; references-have-pointer = px ∷ references-have-pointer valid } ∷ restValid
+                                         ; actors-valid = record {
+                                           actor-has-inbox = actor-has-inbox valid
+                                           ; references-have-pointer = {!!} ∷ references-have-pointer valid } ∷ restValid
                                          ; blocked-valid = blocked-valid env
                                          ; messages-valid = inboxes-valid inboxesAfter
                                          ; name-is-fresh = name-is-fresh env
@@ -289,8 +292,10 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindAct : Actor
     bindAct = add-reference actor (inbox# name actor [ inbox-shape actor ]) (♭ (f _))
     bindActValid : ValidActor (store env) bindAct
-    bindActValid = record { actor-has-inbox = actor-has-inbox valid
-                          ; references-have-pointer = actor-has-inbox valid ∷ references-have-pointer valid }
+    bindActValid = record {
+      actor-has-inbox = actor-has-inbox valid
+      ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: handles-self ] ∷ references-have-pointer valid
+      }
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
 -- ===== Spawn =====
@@ -310,7 +315,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference valid canSendTo
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env env (reference foundTo) (add-message (Value x a) _)
+    withUpdatedInbox = update-inbox-env env (fw-has-pointer (reference foundTo)) (add-message (Value (translate-⊆ (values-sub (fw-handles-wanted (reference foundTo))) x) a) _)
     withTopDropped : Env
     withTopDropped = drop-top-actor withUpdatedInbox
     withUnblocked : Env
@@ -326,8 +331,15 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
     foundTo = lookup-reference valid canSendTo
     foundFw : FoundReference (store env) FwIS
     foundFw = lookup-reference valid canForward
+    holp : FwIS  ∈ InboxShape.reference-types ToIS
+    holp = translate-⊆ {!!} (wanted-reference (fw-handles-wanted (reference foundTo)))
+    heelp : [ Fw (reference foundFw) ]-is-super-reference-in-[ Fw (reference foundTo )]
+    heelp = record {
+      wanted-reference = translate-⊆ (references-sub (fw-handles-wanted (reference foundTo))) holp
+      ; fw-handles-wanted = {!!} }
     withUpdatedInbox : Env
-    withUpdatedInbox = update-inbox-env env (reference foundTo) (add-message (Reference x (name foundFw)) (reference foundFw))
+    withUpdatedInbox = update-inbox-env {name foundTo} {Fw (reference foundTo)} env (fw-has-pointer (reference foundTo))
+                                        (add-message (Reference {Fw (reference foundTo)} heelp (name foundFw)) (fw-has-pointer (reference foundFw))) -- (reference foundTo) -- (reference foundFw)
     withTopDropped : Env
     withTopDropped = drop-top-actor withUpdatedInbox
     withUnblocked : Env
@@ -338,7 +350,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- We could remve the message in the inbox,
 -- but there is currently no proofs that care about doing so.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
-  Receive = keep-simulating (Receive (name actor) Dropped) (drop-top-actor env) 
+  Receive = keep-simulating (Receive (name actor) Dropped) (drop-top-actor env)
 -- ===== Lift =====
 -- Just performs the lifting by translating a subset for preconditions
 -- to a subset for references.

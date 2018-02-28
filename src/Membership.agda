@@ -18,6 +18,14 @@ data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
   SubNil : ∀ {xs} → [] ⊆ xs
   InList : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
 
+⊆-suc : ∀ {a} {A : Set a} {y : A} {xs ys : List A} → xs ⊆ ys → xs ⊆ (y ∷ ys)
+⊆-suc SubNil = SubNil
+⊆-suc (InList x₁ subs) = InList (S x₁) (⊆-suc subs)
+
+xs⊆xs : ∀ {a} {A : Set a} {xs : List A} → xs ⊆ xs
+xs⊆xs {xs = []} = SubNil
+xs⊆xs {xs = x ∷ xs} = InList Z (⊆-suc xs⊆xs)
+
 lookup-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
 lookup-∈ {ls = x ∷ xs} Z = x
 lookup-∈ (S px) = lookup-∈ px

@@ -2,7 +2,7 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥)
+open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; xs⊆xs)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -195,16 +195,30 @@ Fresh¬≡ ls = ∀map (λ frsh → <-¬≡ frsh) ls
 
 -- helps show that all the names in the store are still valid if we add a new name on top,
 -- if the new name is > than all the names already in the store.
-suc-helper : ∀ {store name IS n} →
-            name ↦ IS ∈e store →
+suc-sup-helper : ∀ {store name IS n} →
+            name comp↦ IS ∈ store →
             All (λ v → suc (NamedInbox.name v) Data.Nat.≤ n) store →
             ¬[ name ≟ n ]
+suc-sup-helper [p: () ][handles: _ ] []
+suc-sup-helper [p: zero ][handles: _ ] (px ∷ _) = <-¬≡ px
+suc-sup-helper [p: suc fw-has-pointer ][handles: handles ] (_ ∷ p) = suc-sup-helper [p: fw-has-pointer ][handles: handles ] p
+
+suc-helper : ∀ {store name IS n} →
+           name ↦ IS ∈e store →
+           All (λ v → suc (NamedInbox.name v) Data.Nat.≤ n) store →
+           ¬[ name ≟ n ]
 suc-helper zero (px ∷ p) = <-¬≡ px
 suc-helper (suc q) (px ∷ p) = suc-helper q p
 
+handles-self : {IS : InboxShape} → [ IS ]-handles-all-of-[ IS ]
+handles-self = record { values-sub = xs⊆xs ; references-sub = xs⊆xs }
+
 -- An actor is still valid if we add a new inbox to the store, as long as that name is not used in the store before
 valid-actor-suc : ∀ {store actor n x} → (NameFresh store n) → ValidActor store actor → ValidActor (inbox# n [ x ] ∷ store) actor
-valid-actor-suc frsh va = record { actor-has-inbox = suc {pr = suc-helper (ValidActor.actor-has-inbox va) frsh} (ValidActor.actor-has-inbox va) ; references-have-pointer = ∀map (λ p → suc {pr = suc-helper p frsh} p) (ValidActor.references-have-pointer va) }
+valid-actor-suc frsh va = record {
+  actor-has-inbox = suc {pr = suc-sup-helper [p: (actor-has-inbox va) ][handles: handles-self ] frsh} (actor-has-inbox va)
+  ; references-have-pointer = ∀map (λ { [p: p ][handles: handles ] → [p: (suc {pr = suc-sup-helper [p: p ][handles: handles ] frsh} p) ][handles: handles ] }) (references-have-pointer va) }
+  where open ValidActor
 
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
 messages-valid-suc : ∀ {store inb n x} → (NameFresh store n) → all-messages-valid store inb → all-messages-valid (inbox# n [ x ] ∷ store) inb
@@ -311,17 +325,21 @@ unblock-actor env name = newEnv (loop (blocked env) (blocked-valid env))
 record FoundReference (store : Store) (S : InboxShape) : Set₂ where
   field
     name : Name
-    reference : name ↦ S ∈e store
+    reference : name comp↦ S ∈ store
 
 -- looks up the pointer for one of the references known by an actor
 lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
 lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
   where
-    loop : (pre : List InboxShape) → (refs : List NamedInbox) → (All (λ ni → name ni ↦ shape ni ∈e store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
+    loop : (pre : List InboxShape) → (refs : List NamedInbox) → (All (reference-has-pointer store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
     loop [] refs prfs eq ()
     loop _ [] prfs () Z
     loop _ [] prfs () (S px)
-    loop _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record { name = name ; reference = reference }
+    loop _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record {
+                   name = name
+                   ; reference = reference
+                   }
+      where open _comp↦_∈_
     loop _ (x ∷ refs) (px₁ ∷ prfs) refl (S px) = loop _ refs prfs refl px
 
 record LiftedReferences (lss gss : List InboxShape) (references : List NamedInbox) : Set₂ where
