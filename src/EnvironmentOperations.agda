@@ -39,7 +39,7 @@ new-actor {IS} {A} {post} m name = record
                                         }
 
 -- An actor can be lifted to run sub-programs that need less references
-lift-actor : (actor : Actor) → {pre : ReferenceTypes} → (references : List NamedInbox) →
+lift-actor : (actor : Actor) → {pre : ReferenceTypes} → (references : Store) →
               (pre-eq-refs : (map shape references) ≡ pre) →
               ActorM (inbox-shape actor) (A actor) pre (post actor) → Actor
 lift-actor actor {pre} references pre-eq-refs m = record
@@ -100,9 +100,9 @@ record ValidMessageList (store : Store) (S : InboxShape) : Set₁ where
     inbox : List (NamedMessage S)
     valid : All (message-valid store) inbox
 
-record UpdatedInboxes (store : Store) (original : List Inbox) : Set₂ where
+record UpdatedInboxes (store : Store) (original : Inboxes) : Set₂ where
   field
-    updated-inboxes : List Inbox
+    updated-inboxes : Inboxes
     inboxes-valid : All (all-messages-valid store) updated-inboxes
     same-store : inboxes-to-store original ≡ inboxes-to-store updated-inboxes
 
@@ -119,7 +119,7 @@ open UpdatedInboxes
 -- and has to provide a proof that this list is also valid for the store
 update-inboxes : {name : Name} → {IS : InboxShape} →
   (store : Store) →
-  (inboxes : List Inbox) →
+  (inboxes : Inboxes) →
   (All (all-messages-valid store) inboxes) →
   (name ↦ IS ∈e (inboxes-to-store inboxes)) →
   (f : ValidMessageList store IS → ValidMessageList store IS) →
@@ -261,7 +261,7 @@ get-inbox env point = loop (env-inboxes env) (messages-valid env) (fix-the-point
   where
     fix-the-point : ∀ {name IS} → name ↦ IS ∈e store env → store env ≡ inboxes-to-store (env-inboxes env) → name ↦ IS ∈e inboxes-to-store (env-inboxes env)
     fix-the-point p refl = p
-    loop : ∀ {name IS} → (inboxes : List Inbox) → All (all-messages-valid (store env)) inboxes → name ↦ IS ∈e (inboxes-to-store inboxes) → GetInbox (store env) IS
+    loop : ∀ {name IS} → (inboxes : Inboxes) → All (all-messages-valid (store env)) inboxes → name ↦ IS ∈e (inboxes-to-store inboxes) → GetInbox (store env) IS
     loop [] [] ()
     loop (x ∷ _) (px ∷ prfs) zero = record { messages = Inbox.inbox-messages x ; valid = px }
     loop (_ ∷ inboxes) (_ ∷ prfs) (suc point) = loop inboxes prfs point
@@ -409,7 +409,7 @@ lift-references (InList {y} {xs} x₁ subs) refs refl with (lift-references subs
     contained-el-shape = shape contained-el
     contained-el-ok : y ≡ contained-el-shape
     contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
-    combine : (a b : InboxShape) → (as bs : List InboxShape) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
+    combine : (a b : InboxShape) → (as bs : ReferenceTypes) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
     combine a .a as .as refl refl = refl
 
 -- We can replace the actors in an environment if they all are valid for the current store.

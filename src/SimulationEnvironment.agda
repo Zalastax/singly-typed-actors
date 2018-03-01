@@ -112,6 +112,9 @@ record Inbox : Set₂ where
     inbox-messages : List (NamedMessage inbox-shape)
     name           : Name
 
+-- TODO: Naming of Store and Inboxes?
+Inboxes = List Inbox
+
 -- Property that there exists an inbox of the right shape in the list of inboxes
 -- This is used both for proving that every actor has an inbox,
 -- and for proving that every reference known by an actor has an inbox
@@ -154,7 +157,7 @@ all-messages-valid store inb = All (message-valid store) (Inbox.inbox-messages i
 inbox-to-store-entry : Inbox → NamedInbox
 inbox-to-store-entry inb = inbox# (Inbox.name inb) [ Inbox.inbox-shape inb ]
 
-inboxes-to-store : List Inbox → Store
+inboxes-to-store : Inboxes → Store
 inboxes-to-store = map inbox-to-store-entry
 
 -- A name is unused in a store if every inbox has a name that is < than the name
@@ -173,7 +176,7 @@ record Env : Set₂ where
     -- actors that won't succed in taking a step, and we get a clear step-condition when there are no
     -- non-blocked actors left.
     blocked : List Actor
-    env-inboxes : List Inbox
+    env-inboxes : Inboxes
     store : Store
     inbs=store : store ≡ inboxes-to-store env-inboxes
     -- The proofs that an actor and a blocked actor is valid is actually the same proof,
