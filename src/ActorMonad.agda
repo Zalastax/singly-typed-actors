@@ -22,7 +22,8 @@ open import Level using (Lift ; lift ; suc ; zero)
 --  since the sending and receiving of values have different behaviour from sending and receiving references.
 mutual
   record InboxShape : Set₁ where
-    coinductive
+    inductive
+    constructor ⊠[V:_][R:_]
     field
       value-types : ValueTypes
       reference-types : ReferenceTypes
@@ -49,7 +50,7 @@ record [_]-handles-all-of-[_] (actual wanted : InboxShape) : Set₁ where
 
 -- A reference can be used in place of another reference in S if
 -- it accepts every value and reference of the other,
--- and of course, the other has to be in S  
+-- and of course, the other has to be in S
 record [_]-is-super-reference-in-[_] (Fw S : InboxShape) : Set₁ where
   field
     {wanted} : InboxShape
@@ -213,3 +214,6 @@ receive = ♯ Receive
 -- An inbox can handle every value and reference of itself
 handles-self : {IS : InboxShape} → [ IS ]-handles-all-of-[ IS ]
 handles-self = record { values-sub = xs⊆xs ; references-sub = xs⊆xs }
+
+⊠-of-values : ValueTypes → InboxShape
+⊠-of-values vals = ⊠[V: vals ][R: [] ]

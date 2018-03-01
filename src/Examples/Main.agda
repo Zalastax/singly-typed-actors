@@ -1,9 +1,11 @@
 module Examples.Main where
 import Examples.PingPong as PingPong
+import Examples.InfiniteBind as InfiniteBind
 open import Runtime
 open import SimulationEnvironment
 import IO
 
-spawnerEnv = singleton-env PingPong.spawner
+pingpongEntry = singleton-env PingPong.spawner
+infinitebindEntry = singleton-env InfiniteBind.binder
 
-main = IO.run (run-env trace+actors-logger  spawnerEnv)
+main = IO.run (run-env trace+actors-logger pingpongEntry)

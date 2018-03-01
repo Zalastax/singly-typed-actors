@@ -31,29 +31,27 @@ Spawnbox = record { value-types = [] ; reference-types = [] }
 
 
 mutual
-  Pingbox : InboxShape
-  Pingbox .value-types = Bool ∷ []
-  Pingbox .reference-types = Pongbox ∷ []
+  PingValues = Bool ∷ []
+  PongValues = ℕ ∷ []
 
-  PingNoRef : InboxShape
-  PingNoRef .value-types = Bool ∷ []
-  PingNoRef .reference-types = []
+  PingRefs = ⊠-of-values PongValues ∷ []
+  PongRefs = ⊠-of-values PingValues ∷ []
+
+  Pingbox : InboxShape
+  Pingbox = ⊠[V: PingValues ][R: PingRefs ]
 
   Pongbox : InboxShape
-  Pongbox .value-types = ℕ ∷ []
-  Pongbox .reference-types = PingNoRef ∷ []
+  Pongbox = ⊠[V: PongValues ][R: PongRefs ]
 
-pingrefs : ReferenceTypes
-pingrefs = Pongbox ∷ []
 
 constPingrefs : {A : Set₁} → (A → ReferenceTypes)
-constPingrefs _ =  pingrefs
+constPingrefs _ =  PingRefs
 
 pingMainActor : (A : Set₁) → Set₂
-pingMainActor A = ActorM Pingbox A pingrefs constPingrefs
+pingMainActor A = ActorM Pingbox A PingRefs constPingrefs
 
 mutual
-  pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference pingrefs msg) constPingrefs)
+  pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference PingRefs msg) constPingrefs)
   pingReceive (Value Z b) = return b
   pingReceive (Value (S ()) _)
   pingReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPingValue
@@ -74,22 +72,19 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
       { (lift false) → ♯ ( (Z !v Value Z n) >>= λ _ → pingMain (suc n))
       ; (lift true) → return _}))
 
-pongrefs : ReferenceTypes
-pongrefs = PingNoRef ∷ []
-
 constPongrefs : {A : Set₁} → (A → ReferenceTypes)
-constPongrefs _ = pongrefs
+constPongrefs _ = PongRefs
 
 pongMainActor : (A : Set₁) → Set₂
-pongMainActor A = ActorM Pongbox A pongrefs constPongrefs
+pongMainActor A = ActorM Pongbox A PongRefs constPongrefs
 
 mutual
-  pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference pongrefs msg) constPongrefs)
+  pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference PongRefs msg) constPongrefs)
   pongReceive (Value Z n) = return n
   pongReceive (Value (S ()) _)
   pongReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPongValue
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
-  loopTillPongValue = ♯ (receive >>= pongReceive)
+  loopTillPongValue = ♯ (receive >>= pongReceive) -- ♯ (receive >>= pongReceive)
 
 ponger : ActorM Pongbox ⊤₁ [] constPongrefs
 ponger = loopTillPing >>= λ _ → ♯ ((Z !v Value Z false) >>= λ _ → pongMain)
@@ -107,8 +102,9 @@ ponger = loopTillPing >>= λ _ → ♯ ((Z !v Value Z false) >>= λ _ → pongMa
 spawner : ActorM Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ Pongbox ∷ [])
 spawner = spawn ponger >>= λ _ →
           ♯ (spawn pinger >>= λ _ →
-          ♯ (to Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted =  handles-self }) via S Z >>= λ _ →
+          ♯ (to Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted =  record { values-sub = xs⊆xs ; references-sub = SubNil } }) via S Z >>= λ _ →
           to S Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted = record { values-sub = xs⊆xs; references-sub = SubNil } }) via Z))
   where
     open [_]-handles-all-of-[_]
+
 
