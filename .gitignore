@@ -1,10 +1,19 @@
 # Ignore Agda compiled files
 *.agdai
 .*.agda.vim
+
 # Ignore Emacs backup files
 *~
+
 # Ignore Agda-generated files
 html/
 MAlonzo/
+
 # Ignore exe
 *.exe
+
+# Ignore private makefile config
+.rc.make
+
+# Ignore our generated main file
+src/Examples/Main-generated.agda

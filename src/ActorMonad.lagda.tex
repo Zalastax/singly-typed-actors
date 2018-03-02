@@ -1,3 +1,4 @@
+\begin{code}
 module ActorMonad where
 open import Membership using (_∈_ ; _⊆_ ; xs⊆xs)
 
@@ -6,20 +7,24 @@ open import Data.Unit using (⊤ ; tt)
 
 open import Coinduction using (∞ ; ♯_)
 open import Level using (Lift ; lift ; suc ; zero)
+\end{code}
 
--- An Actor is indexed by the shape of its inbox.
---
--- The shape dictates what types the messages sent to an actor can have,
--- and thus also what types the messages being received by the actor can have.
---
--- The shape is constant over the actors whole life-time.
--- It would be nice to allow the shape to grow monotonically over time.
---
--- The use of coinduction is a product of wanting to allow actors to have mutual references
--- Alternative solutions are welcome
---
--- Values and references are kept separate,
---  since the sending and receiving of values have different behaviour from sending and receiving references.
+An Actor is indexed by the shape of its inbox.
+
+The shape dictates what types the messages sent to an actor can have,
+and thus also what types the messages being received by the actor can have.
+
+The shape is constant over the actors whole life-time.
+It would be nice to allow the shape to grow monotonically over time.
+
+The use of coinduction is a product of wanting to allow actors to have mutual references
+Alternative solutions are welcome
+
+Values and references are kept separate,
+since the sending and receiving of values have different behaviour from sending and receiving references.
+
+%<*InboxShape>
+\begin{code}
 mutual
   record InboxShape : Set₁ where
     inductive
@@ -30,7 +35,9 @@ mutual
 
   ReferenceTypes = List InboxShape
   ValueTypes = List Set
-
+\end{code}
+%</InboxShape>
+\begin{code}
 -- A type is a value type for an inbox of shape S,
 -- if it is an element of the value-types list for S.
 _is-value-in_ : Set → InboxShape → Set₁
@@ -217,3 +224,4 @@ handles-self = record { values-sub = xs⊆xs ; references-sub = xs⊆xs }
 
 ⊠-of-values : ValueTypes → InboxShape
 ⊠-of-values vals = ⊠[V: vals ][R: [] ]
+\end{code}
