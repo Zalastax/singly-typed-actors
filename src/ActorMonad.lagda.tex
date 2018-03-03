@@ -12,18 +12,38 @@ open import Level using (Lift ; lift ; suc ; zero)
 An Actor is indexed by the shape of its inbox.
 
 The shape dictates what types the messages sent to an actor can have,
-and thus also what types the messages being received by the actor can have.
+ and thus also what types the messages being received by the actor can have.
 
 The shape is constant over the actors whole life-time.
 It would be nice to allow the shape to grow monotonically over time.
-
 The use of coinduction is a product of wanting to allow actors to have mutual references
-Alternative solutions are welcome
+ Alternative solutions are welcome
 
 Values and references are kept separate,
 since the sending and receiving of values have different behaviour from sending and receiving references.
 
 %<*InboxShape>
+Our typing rules for communication are based on the idea that the most important property of a message is that it can be understood by the receiver.
+The type system will thus be used to limit what type a message sent to an inbox can have.
+By limiting the types of messages sent to an inbox,
+we can make sure that every message read from the inbox has the expected type.
+In terms of cite!43 years!, this is the interface of the actor.
+
+There are two kinds of messages: values and references.
+A value is any data from Agda's lowest set universe.
+Typical examples are \AgdaRef[Examples/Types]{Bool}, \AgdaRef[Examples/Types]{ℕ}, or \AgdaRef[Examples/Types]{⊤}.
+We limit the types to the lowest set universe since it's not clear how values of higher universes could be serialized
+and to be sent over the wire in a distributed setting, since that would entail serializing the types themselves.
+Unfortunately, the lowest set universe also contain funcions that have their types fully specified:
+\AgdaCatch{Examples/Types}{unfortunate}
+We could of course add further constraints on the types, e.g. that every value has to be serializable,
+but due to its insignificance to the calculus we have opted not to.
+
+Compared to values, a reference type is a bit more involved.
+
+\AgdaTarget{InboxShape}
+\AgdaTarget{ValueType}
+\AgdaTarget{ReferenceTypes}
 \begin{code}
 mutual
   record InboxShape : Set₁ where
@@ -36,17 +56,40 @@ mutual
   ReferenceTypes = List InboxShape
   ValueTypes = List Set
 \end{code}
-%</InboxShape>
-\begin{code}
--- A type is a value type for an inbox of shape S,
--- if it is an element of the value-types list for S.
-_is-value-in_ : Set → InboxShape → Set₁
-A is-value-in S = A ∈ InboxShape.value-types S
 
--- An inbox shape is a reference type for an inbox of shape S,
--- if it is an element of the reference-types list for S.
+\todo{Reference the type pollution problem}
+\todo{List of values, list of inbox types}
+\todo{Better than Either?}
+
+The \AgdaRef[ActorMonad]{InboxShape} is a variant type that details all the messages that can be received from an inbox.
+
+We can think of the \AgdaRef[ActorMonad]{InboxShape} as a set of types,
+and every received message comes paired with a proof that the message is a type from that set.
+
+To know what type the message has, the receiver simply has to inspect the proof,
+Agda will unify the constraints, and the value or reference will be accessible.
+
+We create two convenient properties expressing that a type is a value or a reference in the mentioned set:
+\begin{code}
+_is-value-in_ : Set → InboxShape → Set₁
+V is-value-in S = V ∈ InboxShape.value-types S
+
 _is-reference-in_ : InboxShape → InboxShape → Set₁
 R is-reference-in S = R ∈ InboxShape.reference-types S
+\end{code}
+%</InboxShape>
+
+%<*ReferenceSubtype>
+As mentioned, the important property of a message is that it can be understood by the receiver.
+We could also say that the type of the message has to be compatible with the specified type.
+This property is of course a subtype relation,
+which states that a type is related to another type by some notion of substitutability.
+
+Let's focus on what the subtype relation should be for a message containing a reference.
+When an actor receives a reference, the only thing the reference can be used for is to send messages over.
+What the sending actor wants, is that any message sent to the reference has a valid type for that inbox.
+
+\begin{code}
 
 -- An inbox shape can be used in place of another if
 -- it accepts every value and reference of the other.
@@ -63,6 +106,11 @@ record [_]-is-super-reference-in-[_] (Fw S : InboxShape) : Set₁ where
     {wanted} : InboxShape
     wanted-is-reference : wanted is-reference-in S
     fw-handles-wanted : [ Fw ]-handles-all-of-[ wanted ]
+
+\end{code}
+%</ReferenceSubtype>
+
+\begin{code}
 
 -- We can create a value message for an inbox of shape S,
 -- if the type of the value is a value type for S.
