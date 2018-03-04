@@ -2,7 +2,7 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; SubNil ; InList ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; xs⊆xs ; translate-⊆ ; ⊆-trans)
+open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -336,7 +336,7 @@ lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.referen
 open _comp↦_∈_
 open FoundReference
 open [_]-is-super-reference-in-[_]
-open [_]-handles-all-of-[_]
+open _<:_
 
 -- Extract the found pointer
 underlying-pointer : ∀ {IS store} → (ref : FoundReference store IS) → (name ref ↦ actual (reference ref) ∈e store )
@@ -348,7 +348,7 @@ translate-value-pointer : ∀ {ToIS} {A} {store}
   A ∈ InboxShape.value-types ToIS →
   A ∈ InboxShape.value-types (actual (reference w))
 translate-value-pointer w x = translate-⊆ (values-sub (actual-handles-wanted (reference w))) x
-  where open [_]-handles-all-of-[_]
+  where open _<:_
 
 -- lookup of reference pointers
 translate-reference-pointer : ∀ {ToIS A store} →
@@ -361,7 +361,7 @@ compatible-handles : ∀ {ToIS FwIS store} →
   (x : [ FwIS ]-is-super-reference-in-[ ToIS ]) →
   FoundReference store ToIS →
   (foundFw : FoundReference store FwIS) →
-  [ actual (reference foundFw) ]-handles-all-of-[ wanted x ]
+  actual (reference foundFw) <: wanted x
 compatible-handles x foundTo foundFw with (actual-handles-wanted (reference foundFw))
 ... | b with (values-sub b)
 ... | c with (fw-handles-wanted x)
@@ -390,17 +390,17 @@ open LiftedReferences
 
 -- Convert a subset for preconditions to a subset for references
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references SubNil refs refl = record
-                                     { subset-inbox = SubNil
+lift-references [] refs refl = record
+                                     { subset-inbox = []
                                      ; contained = []
-                                     ; subset = SubNil
+                                     ; subset = []
                                      ; contained-eq-inboxes = refl
                                      }
-lift-references (InList {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
+lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
 ... | q  = record
-                                             { subset-inbox = InList x₁ subs
+                                             { subset-inbox = x₁ ∷ subs
                                              ; contained = (lookup-parallel x₁ refs shape refl) ∷ contained q
-                                             ; subset = InList (translate-∈ x₁ refs shape refl) (subset q)
+                                             ; subset = (translate-∈ x₁ refs shape refl) ∷ (subset q)
                                              ; contained-eq-inboxes = combine y (shape (lookup-parallel x₁ refs shape refl)) xs (map shape (contained q)) contained-el-ok (contained-eq-inboxes q)
                                              }
   where

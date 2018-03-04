@@ -16,26 +16,26 @@ x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
 x∈[]-⊥ ()
 
 data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
-  SubNil : ∀ {xs} → [] ⊆ xs
-  InList : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
+  [] : ∀ {xs} → [] ⊆ xs
+  _∷_ : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
 
 ⊆-suc : ∀ {a} {A : Set a} {y : A} {xs ys : List A} → xs ⊆ ys → xs ⊆ (y ∷ ys)
-⊆-suc SubNil = SubNil
-⊆-suc (InList x₁ subs) = InList (S x₁) (⊆-suc subs)
+⊆-suc [] = []
+⊆-suc (x₁ ∷ subs) = (S x₁) ∷ (⊆-suc subs)
 
-xs⊆xs : ∀ {a} {A : Set a} {xs : List A} → xs ⊆ xs
-xs⊆xs {xs = []} = SubNil
-xs⊆xs {xs = x ∷ xs} = InList Z (⊆-suc xs⊆xs)
+⊆-refl : ∀ {a} {A : Set a} {xs : List A} → xs ⊆ xs
+⊆-refl {xs = []} = []
+⊆-refl {xs = x ∷ xs} = Z ∷ (⊆-suc ⊆-refl)
 
 
-lookup-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
-lookup-∈ {ls = x ∷ xs} Z = x
-lookup-∈ (S px) = lookup-∈ px
+find-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
+find-∈ {ls = x ∷ xs} Z = x
+find-∈ (S px) = find-∈ px
 
 translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} → (ls ⊆ ks) → (x ∈ ls) → (x ∈ ks)
-translate-⊆ SubNil ()
-translate-⊆ (InList x₂ subs) Z = x₂
-translate-⊆ (InList x₂ subs) (S px) = translate-⊆ subs px
+translate-⊆ [] ()
+translate-⊆ (x₂ ∷ subs) Z = x₂
+translate-⊆ (x₂ ∷ subs) (S px) = translate-⊆ subs px
 
 lookup-parallel : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} → x ∈ gss → (refs : List B) → (f : B → A) → map f refs ≡ gss → B
 lookup-parallel Z [] f ()
@@ -61,8 +61,8 @@ lookup-all (S px) (px₁ ∷ pxs) = lookup-all px pxs
 
 All-⊆ : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys} → xs ⊆ ys → All P ys → All P xs
 All-⊆ {xs = []} {ys} subs pys = []
-All-⊆ (InList x₁ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
+All-⊆ (x₁ ∷ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
 
 ⊆-trans : ∀ {a} {A : Set a} {as bs cs : List A} → as ⊆ bs → bs ⊆ cs → as ⊆ cs
-⊆-trans SubNil _ = SubNil
-⊆-trans (InList x₁ asbs) bscs = InList (translate-⊆ bscs x₁) (⊆-trans asbs bscs)
+⊆-trans [] _ = []
+⊆-trans (x₁ ∷ asbs) bscs = (translate-⊆ bscs x₁) ∷ (⊆-trans asbs bscs)

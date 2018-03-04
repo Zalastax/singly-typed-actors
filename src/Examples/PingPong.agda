@@ -8,7 +8,7 @@ open import Coinduction
 open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; InList ; SubNil ; xs⊆xs)
+open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl)
 open import Data.Unit using (⊤ ; tt)
 
 open InboxShape
@@ -54,7 +54,7 @@ mutual
   pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-if-reference PingRefs msg) constPingrefs)
   pingReceive (Value Z b) = return b
   pingReceive (Value (S ()) _)
-  pingReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPingValue
+  pingReceive (Reference _) = ♯ ALift ((S Z) ∷ []) loopTillPingValue
 
   loopTillPingValue : ∞ (pingMainActor (Lift Bool))
   loopTillPingValue = ♯ (receive >>= pingReceive)
@@ -82,7 +82,7 @@ mutual
   pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-if-reference PongRefs msg) constPongrefs)
   pongReceive (Value Z n) = return n
   pongReceive (Value (S ()) _)
-  pongReceive (Reference _) = ♯ ALift (InList (S Z) SubNil) loopTillPongValue
+  pongReceive (Reference _) = ♯ ALift ((S Z) ∷ []) loopTillPongValue
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
   loopTillPongValue = ♯ (receive >>= pongReceive) -- ♯ (receive >>= pongReceive)
 
@@ -102,9 +102,9 @@ ponger = loopTillPing >>= λ _ → ♯ ((Z !v Value Z false) >>= λ _ → pongMa
 spawner : ActorM Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ Pongbox ∷ [])
 spawner = spawn ponger >>= λ _ →
           ♯ (spawn pinger >>= λ _ →
-          ♯ (to Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted =  record { values-sub = xs⊆xs ; references-sub = SubNil } }) via S Z >>= λ _ →
-          to S Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted = record { values-sub = xs⊆xs; references-sub = SubNil } }) via Z))
+          ♯ (to Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted =  record { values-sub = ⊆-refl ; references-sub = [] } }) via S Z >>= λ _ →
+          to S Z !r Reference (record { wanted-is-reference = Z ; fw-handles-wanted = record { values-sub = ⊆-refl ; references-sub = [] } }) via Z))
   where
-    open [_]-handles-all-of-[_]
+    open _<:_
 
 

@@ -53,7 +53,7 @@ open UpdatedInboxes
 open ValidMessageList
 open NamedInbox
 open _comp↦_∈_
-open [_]-handles-all-of-[_]
+open _<:_
 open [_]-is-super-reference-in-[_]
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
@@ -139,7 +139,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
       actor-has-inbox = suc {pr =
         suc-helper (actor-has-inbox valid) (name-is-fresh env)
         } (actor-has-inbox valid)
-      ; references-have-pointer = [p: zero ][handles: handles-self ] ∷ ∀map
+      ; references-have-pointer = [p: zero ][handles: <:-refl ] ∷ ∀map
                                       (λ p → suc-p (suc-helper (actual-has-pointer p) (name-is-fresh env)) p)
                                       (references-have-pointer valid) }
     env' : Env
@@ -305,7 +305,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     bindAct = add-reference actor (inbox# name actor [ inbox-shape actor ]) (♭ (f _))
     bindActValid : ValidActor (store env) bindAct
     bindActValid = record { actor-has-inbox = actor-has-inbox valid
-                          ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: handles-self ] ∷ references-have-pointer valid }
+                          ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: <:-refl ] ∷ references-have-pointer valid }
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (bindActValid ∷ restValid)
 -- ===== Spawn =====
