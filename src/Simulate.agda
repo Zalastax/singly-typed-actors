@@ -54,7 +54,7 @@ open ValidMessageList
 open NamedInbox
 open _comp↦_∈_
 open _<:_
-open [_]-is-super-reference-in-[_]
+open _is->:-reference-in_
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.

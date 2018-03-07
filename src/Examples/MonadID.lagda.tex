@@ -1,0 +1,54 @@
+\begin{code}
+module Examples.MonadID where
+open import Data.Bool using (Bool ; false ; true)
+open import Data.Nat using (ℕ ; zero ; suc)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+
+infixl 1 _>>=_
+\end{code}
+
+%<*Monad>
+\begin{code}
+data MonadID : Set → Set₁ where
+  return : ∀ {A} → A → MonadID A
+  _>>=_ : ∀ {A B} → MonadID A →
+                    (A → MonadID B) →
+                    MonadID B
+\end{code}
+%</Monad>
+
+%<*MonadRun>
+\begin{code}
+run-monadID : ∀ {A} → MonadID A → A
+run-monadID (return x) = x
+run-monadID (m >>= f) = run-monadID (f (run-monadID m))
+\end{code}
+%</MonadRun>
+%<*MonadExample>
+\begin{code}
+bind-suc : ℕ → MonadID ℕ
+bind-suc n = return (suc n)
+
+is-3+ : ℕ → MonadID Bool
+is-3+ 0 = return false
+is-3+ 1 = return false
+is-3+ 2 = return false
+is-3+ _ = return true
+
+prog : ℕ → MonadID Bool
+prog n =
+       return n >>=
+       bind-suc >>=
+       bind-suc >>=
+       is-3+
+
+run-0 : run-monadID (prog 0) ≡ false
+run-0 = refl
+
+run-1 : run-monadID (prog 1) ≡ true
+run-1 = refl
+\end{code}
+
+%</MonadExample>
+
+%<*MonadLaws>

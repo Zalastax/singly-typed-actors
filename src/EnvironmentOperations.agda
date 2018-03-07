@@ -335,7 +335,7 @@ lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.referen
 
 open _comp↦_∈_
 open FoundReference
-open [_]-is-super-reference-in-[_]
+open _is->:-reference-in_
 open _<:_
 
 -- Extract the found pointer
@@ -358,10 +358,10 @@ translate-reference-pointer : ∀ {ToIS A store} →
 translate-reference-pointer w x = translate-⊆ (references-sub (actual-handles-wanted (reference w))) x
 
 compatible-handles : ∀ {ToIS FwIS store} →
-  (x : [ FwIS ]-is-super-reference-in-[ ToIS ]) →
+  (x : FwIS is->:-reference-in ToIS) →
   FoundReference store ToIS →
   (foundFw : FoundReference store FwIS) →
-  actual (reference foundFw) <: wanted x
+  wanted x <: actual (reference foundFw)
 compatible-handles x foundTo foundFw with (actual-handles-wanted (reference foundFw))
 ... | b with (values-sub b)
 ... | c with (fw-handles-wanted x)
@@ -372,7 +372,7 @@ compatible-handles x foundTo foundFw with (actual-handles-wanted (reference foun
   }
 
 make-pointers-compatible : ∀ {ToIS FwIS store} →
-  (x : [ FwIS ]-is-super-reference-in-[ ToIS ]) →
+  (x : FwIS is->:-reference-in ToIS) →
   FoundReference store ToIS →
   (foundFw : FoundReference store FwIS) →
   name foundFw comp↦ wanted x ∈ store

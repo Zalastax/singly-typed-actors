@@ -71,7 +71,7 @@ record _comp↦_∈_ (n : Name) (wanted : InboxShape) (store : Store) : Set₁ w
   field
     {actual} : InboxShape
     actual-has-pointer : n ↦ actual ∈e store
-    actual-handles-wanted : actual <: wanted
+    actual-handles-wanted : wanted <: actual
 
 -- An ActorM wrapped up with all of its parameters
 -- We use this to be able to store actor monads of different types in the same list.
