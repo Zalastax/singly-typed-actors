@@ -1,0 +1,29 @@
+\begin{code}
+module Examples.Monad where
+open import Data.Bool using (Bool ; false ; true)
+open import Data.Nat using (ℕ ; zero ; suc)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+
+infixl 1 _>>=_
+\end{code}
+
+%<*Monad>
+\begin{code}
+data Monad : Set → Set₁ where
+  return : ∀ {A} → A → Monad A
+  _>>=_ : ∀ {A B} → Monad A → (A → Monad B) → Monad B
+\end{code}
+%</Monad>
+
+%<*MonadLaws>
+\begin{code}
+left-identity  = ∀ {A B} → (x : A) → (f : A → Monad B) →
+                   (return x >>= f) ≡ f x
+right-identity = ∀ {A} → (m : Monad A) →
+                  (m >>= return) ≡ m
+associativity  = ∀ {A B C} → (m : Monad A) →
+                  (f : A → Monad B) → (g : B → Monad C) →
+                 ((m >>= f) >>= g) ≡ (m >>= (λ x → f x >>= g))
+\end{code}
+%</MonadLaws>
+

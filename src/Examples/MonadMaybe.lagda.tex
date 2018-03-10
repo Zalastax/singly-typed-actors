@@ -1,0 +1,49 @@
+\begin{code}
+module Examples.MonadMaybe where
+open import Data.Bool using (Bool ; false ; true)
+open import Data.Nat using (ℕ ; zero ; suc)
+open import Data.Nat.DivMod using (_div_)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+
+infixl 1 _>>=_
+\end{code}
+
+%<*Monad>
+\begin{code}
+data Maybe : Set → Set₁ where
+  nothing : ∀ {A}  → Maybe A
+  just : ∀ {A} → A → Maybe A
+
+return : ∀ {A} → A → Maybe A
+return = just
+
+_>>=_ : ∀ {A B} → Maybe A → (A → Maybe B) → Maybe B
+nothing >>= f  = nothing
+just x >>= f = f x
+
+\end{code}
+%</Monad>
+
+%<*MonadExample>
+\begin{code}
+
+_safe-div_ : ℕ → ℕ → Maybe ℕ
+dividend safe-div zero = nothing
+dividend safe-div (suc divisor) = just (dividend div suc divisor)
+
+divmania : ℕ → ℕ → ℕ → ℕ → Maybe ℕ
+divmania a b c d = (a safe-div b) >>= λ a/b →
+                   (c safe-div d) >>= λ c/d →
+                   a/b safe-div c/d
+
+result-0 : divmania 0 1 1 1 ≡ just 0
+result-0 = refl
+
+result-1 : divmania 100 3 10 3 ≡ just 11
+result-1 = refl
+
+result-2 : divmania 10 3 2 5 ≡ nothing
+result-2 = refl
+
+\end{code}
+%</MonadExample>

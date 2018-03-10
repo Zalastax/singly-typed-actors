@@ -1,0 +1,16 @@
+\begin{code}
+module Examples.Types where
+
+open import Data.Unit using (⊤ ; tt)
+open import Data.Bool using (Bool ; false ; true)
+open import Data.Nat using (ℕ ; zero ; suc)
+open import Data.Vec using (Vec ; [] ;  _∷_)
+
+\end{code}
+
+%<*unfortunate>
+\begin{code}
+unfortunate : Set
+unfortunate = ℕ → ℕ
+\end{code}
+%</unfortunate>

@@ -1,0 +1,59 @@
+\begin{code}
+module Examples.MonadParameterized where
+open import Data.Bool using (Bool ; false ; true)
+open import Data.Nat using (ℕ ; zero ; suc)
+open import Data.Unit using (⊤ ; tt)
+open import Data.String using (String)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+
+infixl 1 _>>=_
+\end{code}
+
+%<*Monad'>
+\begin{code}
+data MonadParam' : {p q : Set} → Set → p → q → Set₁ where
+    return : ∀ {A B} → {pre : B} → A → MonadParam' A pre pre
+    _>>=_ : ∀ {A B X Y Z} → {pre : X} → {mid : Y} → {post : Z} →
+            MonadParam' A pre mid →
+            (A → MonadParam' B mid post) →
+            MonadParam' B pre post
+\end{code}
+%</Monad'>
+
+%<*Monad>
+\begin{code}
+data MonadParam : {p q : Set} → (A : Set) → p → (A → q) → Set₁ where
+    return : {A S : Set} → {post : A → S} → (val : A) →
+                MonadParam A (post val) post
+    _>>=_ : ∀ {A B X Y Z} → {pre : X} → {mid : A → Y} → {post : B → Z} →
+                MonadParam A pre mid →
+                ((x : A) → MonadParam B (mid x) post) →
+                MonadParam B pre post
+\end{code}
+%</Monad>
+
+%<*MonadFile>
+\begin{code}
+
+data FileState : Set where
+  Open : String → FileState
+  Closed : FileState
+
+data FileMonad : (A : Set) → FileState → (A → FileState) → Set₁ where
+  return : ∀ {A post} → (val : A) → FileMonad A (post val) post
+  _>>=_ : ∀ {A B pre mid post} →
+            FileMonad A pre mid →
+            ((x : A) → FileMonad B (mid x) post) →
+            FileMonad B pre post
+  OpenFile : String → FileMonad FileState Closed (λ x → x)
+  CloseFile : ∀ { s } → FileMonad ⊤ (Open s) (λ _ → Closed)
+  WriteFile : ∀ { s } → String → FileMonad ⊤ (Open s) (λ _ → Open s)
+
+writeHello : FileMonad ⊤ Closed (λ _ → Closed)
+writeHello = OpenFile "world.txt" >>= λ {
+  Closed → return _ ;
+  (Open _) → WriteFile "hello" >>= λ _ → CloseFile
+  }
+\end{code}
+%</MonadFile>
+
