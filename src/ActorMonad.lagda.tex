@@ -5,6 +5,9 @@ open import Membership using (_∈_ ; _⊆_ ; ⊆-refl ; Z ; S ; find-∈)
 open import Data.List using (List ; [] ; _∷_ ; _++_)
 open import Data.List.All using (All ; [] ; _∷_)
 open import Data.Unit using (⊤ ; tt)
+open import Data.Bool using (Bool ; true ; false)
+open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
 
 open import Coinduction using (∞ ; ♯_)
 open import Level using (Lift ; lift ; suc ; zero)
@@ -188,6 +191,8 @@ extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 add-references : ∀ {To} → ReferenceTypes → Message To → ReferenceTypes
 add-references {To} pre (Msg {MT} x x₁) = extract-references MT ++ pre
 
+MessageFilter : (IS : InboxShape) → Set₁
+MessageFilter IS = Message IS → Bool
 
 infixl 1 _>>=_
 
@@ -258,6 +263,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- Sending a message to a blocked actor will move the actor from the 'blocked queue' back to the
   -- active actors.
   Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
+  SelectiveReceive : ∀ {pre} → (filters : List (MessageFilter IS)) → ActorM IS (Σ[ m ∈ (Message IS) ] Σ[ filter ∈ MessageFilter IS ] Σ[ which ∈ (filter ∈ filters) ] filter m ≡ true) pre λ { (m , rest) → add-references pre m }
   -- Lift let's you call a sub-program that needs less references than what is currently available.
   -- To allow that a lifted program increases the available references,
   -- the postcondition of the resulting actor is the same as the postcondition of the lifted program.¨
