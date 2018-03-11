@@ -9,7 +9,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
 open import Data.Unit using (⊤ ; tt)
 
 Box : InboxShape
-Box = ⊠[V: [] ][R: [] ]
+Box = []
 
 binder : ActorM Box ⊤₁ [] (λ _ → [])
 binder = ♯ binder >>= λ _ → ♯ binder

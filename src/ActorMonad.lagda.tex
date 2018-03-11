@@ -1,8 +1,9 @@
 \begin{code}
 module ActorMonad where
-open import Membership using (_∈_ ; _⊆_ ; ⊆-refl)
+open import Membership using (_∈_ ; _⊆_ ; ⊆-refl ; Z ; S ; find-∈)
 
-open import Data.List using (List ; [] ; _∷_)
+open import Data.List using (List ; [] ; _∷_ ; _++_)
+open import Data.List.All using (All ; [] ; _∷_)
 open import Data.Unit using (⊤ ; tt)
 
 open import Coinduction using (∞ ; ♯_)
@@ -34,15 +35,15 @@ In terms of cite!43 years!, this is the interface of the actor.
 \AgdaTarget{ReferenceTypes}
 \begin{code}
 mutual
-  record InboxShape : Set₁ where
-    inductive
-    constructor ⊠[V:_][R:_]
-    field
-      value-types : ValueTypes
-      reference-types : ReferenceTypes
+  data MessageField : Set₁ where
+    ValueType : Set → MessageField
+    ReferenceType : InboxShape → MessageField
+
+  MessageType = List MessageField
+
+  InboxShape = List MessageType
 
   ReferenceTypes = List InboxShape
-  ValueTypes = List Set
 \end{code}
 
 The \AgdaRef[ActorMonad]{InboxShape} is a variant type that details all the messages that can be received from an inbox.
@@ -54,18 +55,18 @@ For those familiar with Haskell, \AgdaRef[ActorMonad]{InboxShape} can be seen as
 We create two convenient properties expressing that a type is a value or a reference in the mentioned set:
 \AgdaTarget{_is-reference-in_}
 \begin{code}
-_is-value-in_ : Set → InboxShape → Set₁
-V is-value-in S = V ∈ InboxShape.value-types S
+-- _is-value-in_ : Set → InboxShape → Set₁
+-- V is-value-in S = V ∈ InboxShape.value-types S
 
-_is-reference-in_ : InboxShape → InboxShape → Set₁
-R is-reference-in S = R ∈ InboxShape.reference-types S
+-- _is-reference-in_ : InboxShape → InboxShape → Set₁
+-- R is-reference-in S = R ∈ InboxShape.reference-types S
 \end{code}
 
 A value type is any type from Agda's lowest set universe.
 Typical examples are \AgdaRef[Examples/Types]{Bool}, \AgdaRef[Examples/Types]{ℕ}, or \AgdaRef[Examples/Types]{⊤}.
 We limit the types to the lowest set universe since it's not clear how values of higher universes could be serialized
 and to be sent over the wire in a distributed setting, since that would entail serializing the types themselves.
-Unfortunately, the lowest set universe also contain funcions that have their types fully specified:
+Unfortunately, the lowest set universe also contain functions that have their types fully specified:
 \AgdaCatch{Examples/Types}{unfortunate}
 We could of course add further constraints on the types, e.g. that every value has to be serializable,
 but due to its insignificance to the calculus we have opted not to.
@@ -77,7 +78,7 @@ This rule will be used to let different components of our system have different 
 Since an actor can only have one inbox, without a subtyping rule, each component would be forced to specify types it never intends to use.
 Changes in such system would become overly cumbersome,
 since the seemingly small change of letting an actor accept a new type could force changes in the whole system.
-This problem of an overly strict type system in combination with the neccessary union of types for inboxes is a problem \textcite{DBLP:conf/ecoop/HeWT14} calls the \emph{type pollution problem}.
+This problem of an overly strict type system in combination with the necessary union of types for inboxes is a problem \textcite{DBLP:conf/ecoop/HeWT14} calls the \emph{type pollution problem}.
 
 \textcite{DBLP:conf/ecoop/HeWT14} solves the type pollution problem with subtyping, and so do we.
 Given two inboxes $A$ and $B$, if $A <: B$, then every message in $A$ is also a valid message in $B$.
@@ -87,10 +88,7 @@ and the reference types in $A$ are a subset of the references in $B$.
 
 \todo{Create an example of the type-pollution problem solved}
 \begin{code}
-record _<:_ (A B : InboxShape) : Set₁ where
-  field
-    values-sub : InboxShape.value-types A ⊆ InboxShape.value-types B
-    references-sub : InboxShape.reference-types A ⊆ InboxShape.reference-types B
+_<:_ = _⊆_ {A = MessageType}
 \end{code}
 %</InboxShapeSubtype>
 
@@ -122,11 +120,12 @@ An actor with \AgdaRef[ActorMonad]{InboxShape} \AgdaSymbol{S} should thus be abl
 and use it as if it was a reference of the type it wanted.
 
 \begin{code}
-record _is->:-reference-in_ (Fw S : InboxShape) : Set₁ where
+record compatible-reference (pre : ReferenceTypes) (requested : InboxShape) : Set₁ where
+  constructor [_]>:_
   field
-    {wanted} : InboxShape
-    wanted-is-reference : wanted is-reference-in S
-    fw-handles-wanted : wanted <: Fw
+    {actual} : InboxShape
+    actual-is-sendable : actual ∈ pre
+    actual-handles-requested : requested <: actual
 
 \end{code}
 %</ReferenceSubtype>
@@ -135,8 +134,8 @@ record _is->:-reference-in_ (Fw S : InboxShape) : Set₁ where
 
 -- We can create a value message for an inbox of shape S,
 -- if the type of the value is a value type for S.
-data ValueMessage (S : InboxShape) : Set₁ where
-  Value : ∀ {A} → A is-value-in S → A → ValueMessage S
+-- data ValueMessage (S : InboxShape) : Set₁ where
+--  Value : ∀ {A} → A is-value-in S → A → ValueMessage S
 
 -- We can create a reference message for an inbox of shape S,
 -- if the type of the reference is a reference type for S.
@@ -149,16 +148,28 @@ data ValueMessage (S : InboxShape) : Set₁ where
 -- of references to only those that are valid in the current context.
 --
 -- We index ReferenceMessage by both the reference type and the receiver's inbox.
-data ReferenceMessage (S Fw : InboxShape) : Set₁ where
-  Reference : Fw is->:-reference-in S → ReferenceMessage S Fw
+-- data ReferenceMessage (S Fw : InboxShape) : Set₁ where
+--  Reference : Fw is->:-reference-in S → ReferenceMessage S Fw
 
 -- A Message is either a value or a reference.
 --
 -- We could just have wrapped ValueMessage and ReferenceMessage,
 -- but that makes for a noisier experience when pattern matching in application code.
-data Message (S : InboxShape): Set₁ where
-  Value : ∀ {A} → A is-value-in S → A → Message S
-  Reference : ∀ {Fw} → Fw is-reference-in S → Message S
+
+send-field-content : ReferenceTypes → MessageField → Set₁
+send-field-content pre (ValueType A) = Lift A
+send-field-content pre (ReferenceType requested) = compatible-reference pre requested
+
+
+data SendMessage (To : InboxShape) (pre : ReferenceTypes) : Set₁ where
+  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content pre) MT → SendMessage To pre
+
+receive-field-content : MessageField → Set
+receive-field-content (ValueType A) = A
+receive-field-content (ReferenceType Fw) = ⊤
+
+data Message (To : InboxShape) : Set₁ where
+  Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
 
 \end{code}
 %</Messages>
@@ -168,10 +179,15 @@ data Message (S : InboxShape): Set₁ where
 ⊤₁ : Set₁
 ⊤₁ = Lift ⊤
 
+extract-references : MessageType → ReferenceTypes
+extract-references [] = []
+extract-references (ValueType x ∷ mt) = extract-references mt
+extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
+
 -- When a message is received, we increase our capabilities iff the message is a reference.
-add-if-reference : ∀ {S} → ReferenceTypes → Message S → ReferenceTypes
-add-if-reference pre (Value _ _) = pre
-add-if-reference pre (Reference {Fw} _) = Fw ∷ pre
+add-references : ∀ {To} → ReferenceTypes → Message To → ReferenceTypes
+add-references {To} pre (Msg {MT} x x₁) = extract-references MT ++ pre
+
 
 infixl 1 _>>=_
 
@@ -217,9 +233,9 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- available in the precondition.
   -- ValueMessage is indexed by the shape of the inbox we're sending to,
   -- which makes sure that it's not possible to send values of the wrong type.
-  SendValue : ∀ {pre} → {ToIS : InboxShape} →
+  Send : ∀ {pre} → {ToIS : InboxShape} →
     (canSendTo : ToIS ∈ pre) →
-    (msg : ValueMessage ToIS) →
+    (msg : SendMessage ToIS pre) →
     ActorM IS ⊤₁ pre (λ _ → pre)
   -- Send a reference to an actor.
   -- A reference can only be sent to an actor if a reference to it is
@@ -227,11 +243,11 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- The reference being sent also has to be available in the precondition.
   -- ReferenceMessage is indexed by the shape of both the shape of the forwarded
   -- reference and the shape of the receiving inbox.
-  SendReference : ∀ {pre} → {ToIS FwIS : InboxShape} →
-    (canSendTo : ToIS ∈ pre) →
-    (canForward : FwIS ∈ pre) →
-    (msg : ReferenceMessage ToIS FwIS) →
-    ActorM IS ⊤₁ pre (λ _ → pre)
+  -- SendReference : ∀ {pre} → {ToIS FwIS : InboxShape} →
+  --  (canSendTo : ToIS ∈ pre) →
+  --  (canForward : FwIS ∈ pre) →
+  --  (msg : ReferenceMessage ToIS FwIS) →
+  --  ActorM IS ⊤₁ pre (λ _ → pre)
   -- Receive a message.
   -- When receiving a message, the postcondition depends on whether the message
   -- is a value or a reference.
@@ -241,7 +257,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- then the actor is moved to the 'blocked queue'.
   -- Sending a message to a blocked actor will move the actor from the 'blocked queue' back to the
   -- active actors.
-  Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-if-reference pre)
+  Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
   -- Lift let's you call a sub-program that needs less references than what is currently available.
   -- To allow that a lifted program increases the available references,
   -- the postcondition of the resulting actor is the same as the postcondition of the lifted program.¨
@@ -253,7 +269,6 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
     ActorM IS A xs post
   -- Adds the reference to this actor to its available references.
   Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
-
 --
 -- ========== Helpers for ActorM ==========
 --
@@ -273,28 +288,19 @@ spawn : ∀ {IS NewIS A pre postN} →
 spawn newAct = ♯ Spawn newAct
 
 -- coinduction helper and neater syntax for value sending
-_!v_ : ∀ {IS ToIS pre} →
+_![t:_]_ : ∀ {IS ToIS pre MT} →
   (canSendTo : ToIS ∈ pre) →
-  (msg : ValueMessage ToIS) →
+  (MT ∈ ToIS) →
+  All (send-field-content pre) MT →
   ∞ (ActorM IS ⊤₁ pre (λ _ → pre))
-canSendTo !v msg = ♯ SendValue canSendTo msg
-
--- coinduction helper and neater syntax for reference sending
-to_!r_via_ : ∀ {IS pre} → {ToIS FwIS : InboxShape} →
-  (canSendTo : ToIS ∈ pre) →
-  (msg : ReferenceMessage ToIS FwIS)
-  (canForward : FwIS ∈ pre) →
-  ∞ (ActorM IS ⊤₁ pre (λ _ → pre))
-to canSendTo !r msg via canForward = ♯ SendReference canSendTo canForward msg
+canSendTo ![t: p ] fields = ♯ Send canSendTo (SendM p fields)
 
 -- coinduction helper for Receive
-receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-if-reference pre))
+receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-references pre))
 receive = ♯ Receive
 
--- An inbox can handle every value and reference of itself
-<:-refl : {IS : InboxShape} → IS <: IS
-<:-refl = record { values-sub = ⊆-refl ; references-sub = ⊆-refl }
 
-⊠-of-values : ValueTypes → InboxShape
-⊠-of-values vals = ⊠[V: vals ][R: [] ]
+⊠-of-values : List Set → InboxShape
+⊠-of-values [] = []
+⊠-of-values (x ∷ vs) = (ValueType x ∷ []) ∷ ⊠-of-values vs
 \end{code}

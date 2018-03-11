@@ -27,17 +27,20 @@ run-env logger env = loop 1 (simulate env)
 open EnvStep
 open Env
 
+showNames : List Name → String
+showNames [] = ""
+showNames (x ∷ []) = show x
+showNames (x ∷ x₁ ∷ names) = show x ++ ", " ++ showNames (x₁ ∷ names)
+
 -- Creates a nicely formatted string out of a step-trace from the simulation
 show-trace : Trace → String
 show-trace (Return name) = show name ++ " returned"
 show-trace (Bind trace) = "Bind [ " ++ show-trace trace ++ " ]"
 show-trace (BindDouble name) = "Bind " ++ (show name)
 show-trace (Spawn spawner spawned) = (show spawner) ++ " spawned " ++ (show spawned)
-show-trace (SendValue sender receiver) = (show sender) ++ " sent a value to " ++ (show receiver)
-show-trace (SendReference sender receiver reference) = (show sender) ++ " sent a reference to " ++ (show receiver) ++ " forwarding " ++ (show reference)
+show-trace (Send sender receiver references) = (show sender) ++ " sent a reference to " ++ (show receiver) ++ " forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Nothing) = (show name) ++ " received nothing. It was put in the blocked list"
-show-trace (Receive name Value) = (show name) ++ " received a value"
-show-trace (Receive name (Reference reference)) = (show name) ++ " received a reference to " ++ (show reference)
+show-trace (Receive name (Value references)) = (show name) ++ " received a message forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Dropped) = (show name) ++ " received something, but had no bind. It was dropped"
 show-trace (TLift name) = (show name) ++ " was lifted"
 show-trace (Self name) = (show name ++ " used self")

@@ -1,12 +1,12 @@
-{-# OPTIONS --allow-unsolved-metas #-}
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans)
+open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans ; find-∈)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺ ; drop⁺)
+open import Data.List.Properties using (map-++-commute)
 open import Data.List.Any using (Any ; here ; there)
 open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_)
 open import Data.Nat.Properties using (≤-reflexive)
@@ -14,7 +14,7 @@ open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Empty using (⊥ ; ⊥-elim)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
 open import Relation.Nullary using (Dec ; yes ; no)
 
 open import Level using (Lift ; lift)
@@ -77,6 +77,30 @@ add-reference actor nm m = record
                              ; references = nm ∷ references actor
                              ; pre = shape nm ∷ pre actor
                              ; pre-eq-refs = cong (_∷_ (shape nm)) (pre-eq-refs actor)
+                             ; post = post actor
+                             ; actor-m = m
+                             ; name = name actor
+                             }
+
+add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
+add-references-to-actor actor nms m = record
+                                        { inbox-shape = inbox-shape actor
+                                        ; A = A actor
+                                        ; references = nms ++ references actor
+                                        ; pre = map shape nms ++ pre actor
+                                        ; pre-eq-refs = trans (map-++-commute shape nms (references actor)) (cong (_++_ (map shape nms)) (pre-eq-refs actor))
+                                        ; post = post actor
+                                        ; actor-m = m
+                                        ; name = name actor
+                                        }
+
+add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} → map shape nms ++ pre actor ≡ add-references (pre actor) x → ActorM (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) → Actor
+add-references-rewrite actor nms {x} p m = record
+                             { inbox-shape = inbox-shape actor
+                             ; A = A actor
+                             ; references = nms ++ references actor
+                             ; pre = add-references (pre actor) x
+                             ; pre-eq-refs = trans (trans (map-++-commute shape nms (references actor)) (cong (_++_ (map shape nms)) (pre-eq-refs actor))) p
                              ; post = post actor
                              ; actor-m = m
                              ; name = name actor
@@ -216,13 +240,25 @@ valid-actor-suc frsh va = record {
 
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
 messages-valid-suc : ∀ {store inb n x} → (NameFresh store n) → all-messages-valid store inb → all-messages-valid (inbox# n [ x ] ∷ store) inb
-messages-valid-suc {store} {inb} {n} {x} frsh vi = ∀map msgValidSuc vi
+messages-valid-suc {store} {inb} {n} {x} frsh vi = do-the-work n x (Inbox.inbox-shape inb) (Inbox.inbox-messages inb) vi frsh
   where
     open _comp↦_∈_
-    msgValidSuc : {x₁ : NamedMessage (Inbox.inbox-shape inb)} →
+    fields-valid-suc : ∀ {MT} (x₂ : All named-field-content MT) →
+      all-fields-have-pointer store x₂ → all-fields-have-pointer (inbox# n [ x ] ∷ store) x₂
+    fields-valid-suc {[]} [] p = p
+    fields-valid-suc {ValueType x₁ ∷ MT} (_ ∷ x₂) (_ , ps) = _ , fields-valid-suc x₂ ps
+    fields-valid-suc {ReferenceType x₁ ∷ MT} (px ∷ x₂) (p , ps) = suc-p (suc-helper (actual-has-pointer p) frsh) p , fields-valid-suc x₂ ps
+    msgValidSuc : (x₁ : NamedMessage (Inbox.inbox-shape inb)) →
                   message-valid store x₁ → message-valid (inbox# n [ x ] ∷ store) x₁
-    msgValidSuc {x₁ = Value _ _} mv = _
-    msgValidSuc {x₁ = Reference _ _} mv = suc-p (suc-helper (actual-has-pointer mv) frsh) mv --  {pr = suc-helper mv frsh} mv
+    msgValidSuc (NamedM x₁ x₂) mv = fields-valid-suc x₂ mv
+    message-valid-suc : ∀ {MT} (x₂ : All named-field-content MT) → all-fields-have-pointer store x₂ → ∀ n x → (NameFresh store n) → all-fields-have-pointer (inbox# n [ x ] ∷ store) x₂
+    message-valid-suc {[]} [] hj n x frsh = _
+    message-valid-suc {ValueType x₁ ∷ MT} (px ∷ x₂) (_ , hj) n x frsh = _ , message-valid-suc x₂ hj n x frsh
+    message-valid-suc {ReferenceType x₁ ∷ MT} (name ∷ x₂) (px , hj) n x frsh = (suc-p (suc-helper (actual-has-pointer px) frsh) px) , message-valid-suc x₂ hj n x frsh
+    do-the-work : ∀ n x w (w₁ : List (NamedMessage w)) → All (message-valid store) w₁ → NameFresh store n →
+                  All (message-valid (inbox# n [ x ] ∷ store)) w₁
+    do-the-work n x w [] prfs frsh = []
+    do-the-work n x w (NamedM x₁ x₂ ∷ w₁) (px ∷ prfs) frsh = message-valid-suc x₂ px n x frsh ∷ (do-the-work n x w w₁ prfs frsh)
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
@@ -322,62 +358,29 @@ record FoundReference (store : Store) (S : InboxShape) : Set₂ where
     name : Name
     reference : name comp↦ S ∈ store
 
+lookup-reference : ∀ {store ToIS} → (pre : ReferenceTypes) → (refs : List NamedInbox) → All (reference-has-pointer store) refs → map shape refs ≡ pre → ToIS ∈ pre → FoundReference store ToIS
+lookup-reference [] refs prfs eq ()
+lookup-reference (x ∷ pre₁) [] prfs () Z
+lookup-reference (x ∷ pre₁) [] prfs () (S px)
+lookup-reference _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record { name = name ; reference = reference }
+lookup-reference _ (_ ∷ refs) (_ ∷ prfs) refl (S px) = lookup-reference _ refs prfs refl px
+
 -- looks up the pointer for one of the references known by an actor
-lookup-reference : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
-lookup-reference {store} {actor} {ToIS} va ref = loop (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
-  where
-    loop : (pre : ReferenceTypes) → (refs : List NamedInbox) → (All (reference-has-pointer store) refs) → (map shape refs ≡ pre) → ToIS ∈ pre → FoundReference store ToIS
-    loop [] refs prfs eq ()
-    loop _ [] prfs () Z
-    loop _ [] prfs () (S px)
-    loop _ (inbox# name [ shape ] ∷ refs) (reference ∷ prfs) refl Z = record { name = name ; reference = reference }
-    loop _ (x ∷ refs) (px₁ ∷ prfs) refl (S px) = loop _ refs prfs refl px
+lookup-reference-act : ∀ {store actor ToIS} → ValidActor store actor → ToIS ∈ (pre actor) → FoundReference store ToIS
+lookup-reference-act {store} {actor} {ToIS} va ref = lookup-reference (pre actor) (Actor.references actor) (ValidActor.references-have-pointer va) (pre-eq-refs actor) ref
 
 open _comp↦_∈_
 open FoundReference
-open _is->:-reference-in_
-open _<:_
 
 -- Extract the found pointer
 underlying-pointer : ∀ {IS store} → (ref : FoundReference store IS) → (name ref ↦ actual (reference ref) ∈e store )
 underlying-pointer ref = actual-has-pointer (reference ref)
 
--- lookup of value pointers
-translate-value-pointer : ∀ {ToIS} {A} {store}
+translate-message-pointer : ∀ {ToIS A store} →
   (w : FoundReference store ToIS) →
-  A ∈ InboxShape.value-types ToIS →
-  A ∈ InboxShape.value-types (actual (reference w))
-translate-value-pointer w x = translate-⊆ (values-sub (actual-handles-wanted (reference w))) x
-  where open _<:_
-
--- lookup of reference pointers
-translate-reference-pointer : ∀ {ToIS A store} →
-  (w : FoundReference store ToIS) →
-  A ∈ InboxShape.reference-types ToIS →
-  A ∈ InboxShape.reference-types (actual (reference w))
-translate-reference-pointer w x = translate-⊆ (references-sub (actual-handles-wanted (reference w))) x
-
-compatible-handles : ∀ {ToIS FwIS store} →
-  (x : FwIS is->:-reference-in ToIS) →
-  FoundReference store ToIS →
-  (foundFw : FoundReference store FwIS) →
-  wanted x <: actual (reference foundFw)
-compatible-handles x foundTo foundFw with (actual-handles-wanted (reference foundFw))
-... | b with (values-sub b)
-... | c with (fw-handles-wanted x)
-... | d with (values-sub d)
-... | e = record {
-  values-sub = ⊆-trans (values-sub d) (values-sub b)
-  ; references-sub = ⊆-trans (references-sub d) (references-sub b)
-  }
-
-make-pointers-compatible : ∀ {ToIS FwIS store} →
-  (x : FwIS is->:-reference-in ToIS) →
-  FoundReference store ToIS →
-  (foundFw : FoundReference store FwIS) →
-  name foundFw comp↦ wanted x ∈ store
-make-pointers-compatible x foundTo foundFw = [p: (actual-has-pointer (reference foundFw)) ][handles: compatible-handles x foundTo foundFw ]
-
+  A ∈ ToIS →
+  A ∈ (actual (reference w))
+translate-message-pointer w x = translate-⊆ (actual-handles-wanted (reference w)) x
 
 record LiftedReferences (lss gss : ReferenceTypes) (references : List NamedInbox) : Set₂ where
   field
@@ -453,3 +456,100 @@ add-message message valid vml = record { inbox = inbox vml ++ (message ∷ []) ;
 -- This is a no-op if there are no messages in the inbox.
 remove-message : {S : InboxShape} → {store : Store} → (ValidMessageList store S → ValidMessageList store S)
 remove-message vml = record { inbox = drop 1 (inbox vml) ; valid = drop⁺ 1 (ValidMessageList.valid vml) }
+
+
+name-fields : ∀ {MT store} → (pre : ReferenceTypes) →
+               (refs : List NamedInbox) →
+               All (reference-has-pointer store) refs →
+               All (send-field-content pre) MT →
+               map shape refs ≡ pre →
+               All named-field-content MT
+name-fields pre refs rhp [] eq = []
+name-fields _ refs rhp (_∷_ {ValueType x} (lift lower) sfc) refl = lower ∷ (name-fields _ refs rhp sfc refl)
+name-fields {store = store} _ refs rhp (_∷_ {ReferenceType x} px sfc) refl = name (lookup-reference _ refs rhp refl (compatible-reference.actual-is-sendable px)) ∷ (name-fields _ refs rhp sfc refl)
+
+name-fields-act : ∀ {MT} store → ∀ actor →
+              All (send-field-content (pre actor)) MT →
+              ValidActor store actor → All named-field-content MT
+name-fields-act store actor sfc valid = name-fields (pre actor) (Actor.references actor) (references-have-pointer valid) sfc (pre-eq-refs actor)
+
+unname-field : ∀ {x} → named-field-content x → receive-field-content x
+unname-field {ValueType x₁} nfc = nfc
+unname-field {ReferenceType x₁} nfc = _
+
+unname-message : ∀ {S} → NamedMessage S → Message S
+unname-message (NamedM x fields) = Msg x (do-the-work fields) -- (∀map unname-field fields)
+  where
+    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
+    do-the-work {[]} nfc = []
+    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
+    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
+
+extract-inboxes : ∀ {MT} → All named-field-content MT → List NamedInbox
+extract-inboxes [] = []
+extract-inboxes (_∷_ {ValueType _} _ ps) = extract-inboxes ps
+extract-inboxes (_∷_ {ReferenceType x} name ps) = inbox# name [ x ] ∷ extract-inboxes ps
+
+named-inboxes : ∀ {S} → (nm : NamedMessage S) → List NamedInbox
+named-inboxes (NamedM x x₁) = extract-inboxes x₁
+
+reference-names : {MT : MessageType} → All named-field-content MT → List Name
+reference-names [] = []
+reference-names (_∷_ {ValueType x} px ps) = reference-names ps
+reference-names (_∷_ {ReferenceType x} name ps) = name ∷ reference-names ps
+
+++-diff : (a b c : List InboxShape) → a ≡ b → a ++ c ≡ b ++ c
+++-diff [] .[] c refl = refl
+++-diff (x ∷ a) .(x ∷ a) c refl = refl
+
+add-references++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ w → map shape (named-inboxes nm) ++ w ≡ add-references w (unname-message nm)
+add-references++ msg@(NamedM {MT} x x₁) p w = halp (add-fields++ MT x₁)
+  where
+    halp : map shape (extract-inboxes x₁) ≡ extract-references MT → map shape (extract-inboxes x₁) ++ w ≡ extract-references MT ++ w
+    halp p = ++-diff (map shape (extract-inboxes x₁)) (extract-references MT) w p
+    add-fields++ : ∀ MT → (x₁ : All named-field-content MT) → map shape (extract-inboxes x₁) ≡ extract-references MT
+    add-fields++ [] [] = refl
+    add-fields++ (ValueType x ∷ MT) (px ∷ x₁) = add-fields++ MT x₁
+    add-fields++ (ReferenceType x ∷ MT) (px ∷ x₁) = cong (_∷_ x) (add-fields++ MT x₁)
+
+valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ w →
+        All (reference-has-pointer store) w →
+        All (reference-has-pointer store) (named-inboxes nm ++ w)
+valid++ (NamedM x x₁) v p = valid-fields x₁ v p
+  where
+    valid-fields : ∀ {MT store} →
+                   (x₁ : All named-field-content MT) →
+                   all-fields-have-pointer store x₁ → ∀ p →
+                   All (reference-has-pointer store) p →
+                   All (reference-has-pointer store) (extract-inboxes x₁ ++ p)
+    valid-fields [] h p ps = ps
+    valid-fields (_∷_ {ValueType x} px x₁) (_ , h) p ps = valid-fields x₁ h p ps
+    valid-fields (_∷_ {ReferenceType x} px x₁) (hj , h) p ps = hj ∷ (valid-fields x₁ h p ps)
+
+open compatible-reference
+
+compatible-handles : ∀ store x refs
+                     (px : compatible-reference (map shape refs) x)
+                     (w : FoundReference store (compatible-reference.actual px)) →
+                     x ⊆ actual (reference w)
+compatible-handles store x refs px w with (actual-handles-requested px)
+... | a with (actual-handles-wanted (reference w))
+... | b = ⊆-trans a b
+
+make-pointer-compatible : ∀ store x refs
+                       (px : compatible-reference (map shape refs) x) →
+                       (All (reference-has-pointer store) refs) →
+                       (w : FoundReference store (compatible-reference.actual px)) →
+                       name w comp↦ x ∈ store
+make-pointer-compatible store x refs px rhp w = [p: actual-has-pointer (reference w) ][handles: compatible-handles store x refs px w ]
+
+make-pointers-compatible : ∀ {MT} store pre refs (eq : map shape refs ≡ pre)
+                           (fields : All (send-field-content pre) MT)
+                           (rhp : All (reference-has-pointer store) refs) →
+                         all-fields-have-pointer store (name-fields pre refs rhp fields eq)
+make-pointers-compatible store pre refs eq [] rhp = _
+make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = _ , (make-pointers-compatible store _ refs refl fields rhp)
+make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = make-pointer-compatible store x refs px rhp foundFw , (make-pointers-compatible store _ refs refl fields rhp)
+  where
+    foundFw : FoundReference store (compatible-reference.actual px)
+    foundFw = lookup-reference _ refs rhp refl (compatible-reference.actual-is-sendable px)

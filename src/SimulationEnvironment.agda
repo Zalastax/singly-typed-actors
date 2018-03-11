@@ -1,5 +1,5 @@
 module SimulationEnvironment where
-open import Membership using (_∈_)
+open import Membership using (_∈_ ; find-∈)
 open import ActorMonad
 
 open import Data.List using (List ; _∷_ ; [] ; map)
@@ -8,9 +8,12 @@ open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Nat using (ℕ ; _≟_)
 open import Data.Unit using (⊤ ; tt)
 
+open import Level using (Lift ; lift)
+
 open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym)
+open import Relation.Unary using (Decidable) renaming (_⊆_ to _⋐_)
 
 -- We give every actor and inbox a name.
 -- The internal type of an actor is not important,
@@ -91,6 +94,10 @@ record Actor : Set₂ where
     actor-m     : ActorM inbox-shape A pre post
     name        : Name
 
+named-field-content : MessageField → Set
+named-field-content (ValueType A) = A
+named-field-content (ReferenceType Fw) = Name
+
 -- We can look up which inbox a reference refers to when a message is sent.
 -- We can however not add the reference to the actor immediately,
 -- since the reference should only be added when the message is received.
@@ -100,9 +107,8 @@ record Actor : Set₂ where
 -- The decision to use names for references and pointers, rather than just ∈,
 -- makes it possible to prove that a sent message containing a reference
 -- does not need to be modified when more actors are added.
-data NamedMessage (S : InboxShape): Set₁ where
-  Value : ∀ {A} → A is-value-in S → A → NamedMessage S
-  Reference : ∀ {Fw} → Fw is-reference-in S → Name → NamedMessage S
+data NamedMessage (To : InboxShape): Set₁ where
+  NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
 
 -- A list of messages, wrapped up with the shape of the messages
 -- Each inbox is given a name, matching those for actors
@@ -139,13 +145,17 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
     actor-has-inbox : has-inbox store actor
     references-have-pointer : all-references-have-a-pointer store actor
 
+all-fields-have-pointer : ∀ {MT} → Store → All named-field-content MT → Set₁
+all-fields-have-pointer st [] = Lift ⊤
+all-fields-have-pointer st (_∷_ {ValueType _} _ xs) = ⊤ × all-fields-have-pointer st xs
+all-fields-have-pointer st (_∷_ {ReferenceType Fw} name xs) = (name comp↦ Fw ∈ st) × all-fields-have-pointer st xs
+
 -- To limit references to only those that are valid for the current store,
 -- we have to prove that name in the message points to an inbox of the same
 -- type as the reference.
 -- Value messages are not context sensitive.
 message-valid : ∀ {IS} → Store → NamedMessage IS → Set₁
-message-valid store (Value _ _) = ⊤₁
-message-valid store (Reference {Fw} _ name) = name comp↦ Fw ∈ store
+message-valid store (NamedM x x₁) = all-fields-have-pointer store x₁
 
 -- An inbox is valid in a store if all its messages are valid
 all-messages-valid : Store → Inbox → Set₁

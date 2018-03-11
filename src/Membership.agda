@@ -27,10 +27,11 @@ data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
 ⊆-refl {xs = []} = []
 ⊆-refl {xs = x ∷ xs} = Z ∷ (⊆-suc ⊆-refl)
 
-
+-- TODO: discuss whether there's a way to not do this ugly trick while still having easy proofs
 find-∈ : ∀ {a} {A : Set a} {ls : List A} {x : A} → (x ∈ ls) → A
-find-∈ {ls = x ∷ xs} Z = x
-find-∈ (S px) = find-∈ px
+find-∈ {x = x} _ = x
+-- find-∈ {ls = x ∷ xs} Z = x
+-- find-∈ (S px) = find-∈ px
 
 translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} → (ls ⊆ ks) → (x ∈ ls) → (x ∈ ks)
 translate-⊆ [] ()
