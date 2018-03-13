@@ -141,6 +141,7 @@ accept-found pre q record { heads = heads ; el = Msg {MT} x y ; tails = tails ; 
         (⊆-move (extract-references MT) (waiting-refs heads)))
       (⊆++comm (waiting-refs heads) (extract-references MT) (waiting-refs tails)))
 
+-- TODO: move-received should add at the end!
 selective-receive : ∀ {IS pre} → (q : List (Message IS)) → (f : Message IS → Bool) → ActorM IS (SelRec IS f) (pre ++ (waiting-refs q)) (λ m → (add-references pre (msg m)) ++ (waiting-refs (waiting m)))
 selective-receive {IS} {pre} q f = case-of-find (find-split q f)
   where
