@@ -196,6 +196,11 @@ MessageFilter IS = Message IS → Bool
 
 infixl 1 _>>=_
 
+record SelectedMessage {IS : InboxShape} (filter : MessageFilter IS) : Set₁ where
+  field
+    msg : Message IS
+    msg-ok : filter msg ≡ true
+
 -- An Actor is modeled as a monad.
 --
 -- It is indexed by the shape of its inbox, which can't change over the course of its life-time.
@@ -263,7 +268,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- Sending a message to a blocked actor will move the actor from the 'blocked queue' back to the
   -- active actors.
   Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
-  SelectiveReceive : ∀ {pre} → (filters : List (MessageFilter IS)) → ActorM IS (Σ[ m ∈ (Message IS) ] Σ[ filter ∈ MessageFilter IS ] Σ[ which ∈ (filter ∈ filters) ] filter m ≡ true) pre λ { (m , rest) → add-references pre m }
+  SelectiveReceive : ∀ {pre} → (filter : MessageFilter IS) → ActorM IS (SelectedMessage filter) pre λ { m → add-references pre (SelectedMessage.msg m) }
   -- Lift let's you call a sub-program that needs less references than what is currently available.
   -- To allow that a lifted program increases the available references,
   -- the postcondition of the resulting actor is the same as the postcondition of the lifted program.¨

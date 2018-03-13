@@ -110,6 +110,9 @@ named-field-content (ReferenceType Fw) = Name
 data NamedMessage (To : InboxShape): Set₁ where
   NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
 
+named-message-fields : ∀ {To} → NamedMessage To → Σ[ MT ∈ MessageType ] All named-field-content MT
+named-message-fields (NamedM {MT} x x₁) = MT , x₁
+
 -- A list of messages, wrapped up with the shape of the messages
 -- Each inbox is given a name, matching those for actors
 record Inbox : Set₂ where

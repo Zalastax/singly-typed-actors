@@ -92,15 +92,13 @@ ponger : ActorM Pongbox ⊤₁ [] constPongrefs
 ponger = loopTillPing >>= λ _ → ♯ ((Z ![t: Z ] ((lift false) ∷ [])) >>= λ _ → pongMain)
   where
     loopTillPing : ∞ (ActorM Pongbox ⊤₁ [] constPongrefs)
-    loopTillPing = ♯ (♯ SelectiveReceive ((λ {
+    loopTillPing = ♯ (♯ SelectiveReceive (λ {
       (Msg Z x₁) → false
-      ; (Msg (S Z) x₁) → true
-      ; (Msg (S (S ())) x₁) }) ∷ []) >>= λ {
-      (Msg Z x₁ , _ , Z , ())
-      ; (Msg Z x₁ , proj₂ , S () , proj₄)
-      ; (Msg (S Z) x₁ , _ , Z , refl) → return _
-      ; (Msg (S (S ())) x₁ , _ , Z , proj₄)
-      ; (Msg (S x) x₁ , proj₂ , S () , proj₄) })
+      ; (Msg (S Z) _) → true
+      ; (Msg (S (S ())) _)}) >>= λ {
+        record { msg = (Msg Z _) ; msg-ok = () }
+      ; record { msg = (Msg (S Z) _) ; msg-ok = msg-ok } → return₁ _
+      ; record { msg = (Msg (S (S ())) x₁) }})
     pongMain : ∞ (pongMainActor ⊤₁)
     pongMain = ♯ (loopTillPongValue >>= λ
       { (lift 10) → ♯ (Z ![t: Z ] ((lift true) ∷ []) >>= λ _ → return _)

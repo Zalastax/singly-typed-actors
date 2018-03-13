@@ -31,6 +31,7 @@ data Trace : Set where
   Spawn : (spawner : Name) → (spawned : Name) → Trace
   Send : (sender : Name) → (receiver : Name) → (references : List Name) → Trace
   Receive : Name → ReceiveKind → Trace
+  Selective : Name → ReceiveKind → Trace
   TLift : Name → Trace
   Self : Name → Trace
 
@@ -228,6 +229,42 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                                                    ; fresh-name = fresh-name env
                                                                    ; name-is-fresh = name-is-fresh env
                                                                    }
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+  SelectiveReceive filter = keep-simulating (Bind (Selective (name actor) (receiveKind selectedMessage))) (env' selectedMessage)
+  where
+    actorsInbox : GetInbox (store env) (inbox-shape actor)
+    actorsInbox = get-inbox env (actor-has-inbox valid)
+    actorsPointer : (inboxes-to-store (env-inboxes env) ≡ store env) → (name actor) ↦ (inbox-shape actor) ∈e inboxes-to-store (env-inboxes env)
+    actorsPointer refl = actor-has-inbox valid
+    selectedMessage : FoundInList (GetInbox.messages actorsInbox) (λ x → filter (unname-message x))
+    selectedMessage = find-split (GetInbox.messages actorsInbox) λ x → filter (unname-message x)
+    inboxesAfter = update-inboxes (store env) (env-inboxes env) (messages-valid env) (actorsPointer (sym (inbs=store env))) (remove-found-message filter)
+    receiveKind : FoundInList (GetInbox.messages actorsInbox) (λ x → filter (unname-message x)) → ReceiveKind
+    receiveKind (Found split x) = Value (reference-names (Σ.proj₂ (named-message-fields (el split))))
+      where open SplitList
+    receiveKind Nothing = Nothing
+    env' : FoundInList (GetInbox.messages actorsInbox) (λ x → filter (unname-message x)) → Env
+    env' Nothing = replace-actors+blocked env
+                                                rest restValid
+                                                (actor ∷ blocked env) (valid ∷ blocked-valid env)
+    env' (Found split x ) = record
+                              { acts = add-references-rewrite actor (named-inboxes (SplitList.el split)) {unname-message (SplitList.el split)}
+                                       (add-references++ (SplitList.el split) (split-all-el (GetInbox.messages actorsInbox) (GetInbox.valid actorsInbox) split) (pre actor))
+                                       (♭ (f (record { msg = unname-message (SplitList.el split) ; msg-ok = x }))) ∷ rest
+                              ; blocked = blocked env
+                              ; env-inboxes = updated-inboxes inboxesAfter
+                              ; store = store env
+                              ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
+                              ; actors-valid = record {
+                                actor-has-inbox = actor-has-inbox valid
+                                ; references-have-pointer = valid++ (SplitList.el split)
+                                  (split-all-el (GetInbox.messages actorsInbox) (GetInbox.valid actorsInbox) split) (references actor) (references-have-pointer valid)
+                                } ∷ restValid
+                              ; blocked-valid = blocked-valid env
+                              ; messages-valid = inboxes-valid inboxesAfter
+                              ; fresh-name = fresh-name env
+                              ; name-is-fresh = name-is-fresh env
+                              }
 -- ===== Bind lift =====
 -- To bind a lift we just perform the lifting of the actor and rewrap it in the same bind, like so:
 -- ((Lift x) >>= f) ⇒ liftedX >>= f
@@ -292,6 +329,8 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- but there is currently no proofs that care about doing so.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   Receive = keep-simulating (Receive (name actor) Dropped) (drop-top-actor env)
+simulate env | actor@(_) ∷ rest | valid ∷ restValid |
+  SelectiveReceive _ = keep-simulating (Selective (name actor) Dropped) (drop-top-actor env)
 -- ===== Lift =====
 -- Just performs the lifting by translating a subset for preconditions
 -- to a subset for references.
