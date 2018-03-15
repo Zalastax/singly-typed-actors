@@ -14,3 +14,13 @@ unfortunate : Set
 unfortunate = ℕ → ℕ
 \end{code}
 %</unfortunate>
+
+\begin{code}
+Name = ℕ
+\end{code}
+%<*ActorRef>
+\begin{code}
+data ActorRef : (InboxType : Set) → Set where
+    create-actor-ref : ∀ {A} → Name → ActorRef A
+\end{code}
+%</ActorRef>

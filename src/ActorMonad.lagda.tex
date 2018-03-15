@@ -17,22 +17,19 @@ The shape dictates what types the messages sent to an actor can have,
 
 The shape is constant over the actors whole life-time.
 It would be nice to allow the shape to grow monotonically over time.
-The use of coinduction is a product of wanting to allow actors to have mutual references
- Alternative solutions are welcome
-
-Values and references are kept separate,
-since the sending and receiving of values have different behaviour from sending and receiving references.
 
 %<*InboxShape>
-Our typing rules for communication are based on the idea that the most important property of a message is that it can be understood by the receiver.
+Our typing rules for communication are based on the idea that the most important
+property of a message is that it can be understood by the receiver.
 The type system will thus be used to limit what type a message sent to an inbox can have.
 By limiting the types of messages sent to an inbox,
-we can make sure that every message read from the inbox has the expected type.
-In terms of cite!43 years!, this is the interface of the actor.
+we can make sure that every message read from the inbox has a valid type.
+In terms of \textcite{DBLP:conf/agere/KosterCM16}, this is the interface of the actor.
 
-\AgdaTarget{InboxShape}
+\AgdaTarget{MessageType}
 \AgdaTarget{ValueType}
-\AgdaTarget{ReferenceTypes}
+\AgdaTarget{ReferenceType}
+\AgdaTarget{InboxShape}
 \begin{code}
 mutual
   data MessageField : Set₁ where
@@ -42,49 +39,73 @@ mutual
   MessageType = List MessageField
 
   InboxShape = List MessageType
-
-  ReferenceTypes = List InboxShape
 \end{code}
 
-The \AgdaRef[ActorMonad]{InboxShape} is a variant type that details all the messages that can be received from an inbox.
+The \AgdaRef[ActorMonad]{InboxShape} is a variant type that details
+all the messages that can be received from an inbox.
+Every message sent to an actor will have exactly one of the types that is listed.
 We can think of the \AgdaRef[ActorMonad]{InboxShape} as a set of types,
-and every received message comes paired with a proof that the message is a type from that set.
-To know what type the message has you have to inspect the proof,
-Agda will solve the constraints, and the value or reference in the message will be accessible.
-For those familiar with Haskell, \AgdaRef[ActorMonad]{InboxShape} can be seen as a generalized Either type.
-We create two convenient properties expressing that a type is a value or a reference in the mentioned set:
-\AgdaTarget{_is-reference-in_}
-\begin{code}
--- _is-value-in_ : Set → InboxShape → Set₁
--- V is-value-in S = V ∈ InboxShape.value-types S
+and every message coming paired with a proof that the message is a type from that set.
+To know what type a message has you have to inspect the proof,
+and the value or reference in the message will become accessible.
+For those familiar with Haskell,
+\AgdaRef[ActorMonad]{InboxShape} can be seen as a generalized Either type.
 
--- _is-reference-in_ : InboxShape → InboxShape → Set₁
--- R is-reference-in S = R ∈ InboxShape.reference-types S
-\end{code}
+\AgdaRef[ActorMonad]{MessageType} also uses a list as its underlying data structure,
+but for a rather different purpose.
+\AgdaRef[ActorMonad]{MessageType} is the type of a single message,
+and every element in the list represents a single field in a record.
+\AgdaRef[ActorMonad]{MessageType} can thus be seen as a generalized tuple type.
 
+The fields in \AgdaRef[ActorMonad]{MessageType} are either a value type or a reference type.
 A value type is any type from Agda's lowest set universe.
-Typical examples are \AgdaRef[Examples/Types]{Bool}, \AgdaRef[Examples/Types]{ℕ}, or \AgdaRef[Examples/Types]{⊤}.
-We limit the types to the lowest set universe since it's not clear how values of higher universes could be serialized
-and to be sent over the wire in a distributed setting, since that would entail serializing the types themselves.
+Typical examples are \AgdaRef[Examples/Types]{Bool}, \AgdaRef[Examples/Types]{ℕ},
+or \AgdaRef[Examples/Types]{⊤}.
+We limit the types to the lowest set universe since it's not clear how values of
+higher universes could be serialized and sent over the wire in a distributed setting,
+since that would entail serializing the types themselves.
 Unfortunately, the lowest set universe also contain functions that have their types fully specified:
 \AgdaCatch{Examples/Types}{unfortunate}
-We could of course add further constraints on the types, e.g. that every value has to be serializable,
+We could of course add further constraints on the types,
+e.g. that every value has to be serializable,
 but due to its insignificance to the calculus we have opted not to.
+
+A reference is directly tied to an underlying inbox and
+what inbox that is can not change during its lifetime.
+The type of a reference specifies what type a message sent via the reference can have,
+and is used to uphold the guarantee that every message in the inbox
+can be understood by the receiver.
+The guarantee is automatically enforced since sending an actor a message
+of the wrong type will raise a compilation error.
+By using type-parameterized actor references,
+the receiver does not need to worry about unexpected messages,
+while senders can be sure that messages will be understood.
+Typically, the reference type should be the smallest set of types
+that will be sent using that reference.
 %</InboxShape>
 
 %<*InboxShapeSubtype>
-Before describing references, we will make a side-step to introduce the subtyping rule for \AgdaRef[ActorMonad]{InboxShape}.
-This rule will be used to let different components of our system have different interfaces to the same inbox.
-Since an actor can only have one inbox, without a subtyping rule, each component would be forced to specify types it never intends to use.
-Changes in such system would become overly cumbersome,
-since the seemingly small change of letting an actor accept a new type could force changes in the whole system.
-This problem of an overly strict type system in combination with the necessary union of types for inboxes is a problem \textcite{DBLP:conf/ecoop/HeWT14} calls the \emph{type pollution problem}.
+The Interface Segregation Principle (ISP) is a design principle that states
+that no client should be forced to depend on methods it does not use \parencite{martin2002agile}.
+When clients depend upon objects which contain methods used only by other clients,
+this can lead to fragile code \parencite{martin2002agile}.
+In particular, if a client depends on an interface that contains
+methods that the client does not use but others do,
+that client will be affected by changes that those other clients
+force on the interface \parencite{martin2002agile}.
+This idea has also been addressed in the context of actor systems
+where \textcite{DBLP:conf/ecoop/HeWT14} uses the term \emph{type pollution problem}
+to describe the issue of actor interfaces being too fat.
 
-\textcite{DBLP:conf/ecoop/HeWT14} solves the type pollution problem with subtyping, and so do we.
-Given two inboxes $A$ and $B$, if $A <: B$, then every message in $A$ is also a valid message in $B$.
+Just as the advice of ISP is to break each class into granular interfaces,
+the advice of \textcite{DBLP:conf/ecoop/HeWT14} is
+to break the type of inboxes into granular subtypes.
+What the subtype relation means is that given two inboxes $A$ and $B$,
+if $A <: B$, then every message in $A$ is also a valid message in $B$.
 Since we model \AgdaRef[ActorMonad]{InboxShape} as a set,
-our subtype relation is of course the proposition that the values types in $A$ are a subset of the value types in $B$,
-and the reference types in $A$ are a subset of the references in $B$.
+our subtype relation can be taken to just be the subset relation.
+The drawback of using subsets is that recursive subtypes are not captured,
+but we deem it good enough for our purposes and simple to work with.
 
 \todo{Create an example of the type-pollution problem solved}
 \begin{code}
@@ -93,25 +114,60 @@ _<:_ = _⊆_ {A = MessageType}
 %</InboxShapeSubtype>
 
 %<*ReferenceSubtype>
-With the subtype relation defined we can finally describe references.
-% As mentioned, the important property of a message is that it can be understood by the receiver.
-% We could also say that the type of the message has to be compatible with the specified type, i.e. the actual type is a subtype of the wanted type.
-% Let's focus on what the subtype relation should be for a message containing a reference.
-A reference is directly tied to an underlying inbox and what inbox that is can not change during its lifetime.
-The type of a reference specifies what type a message sent to it can have,
-and is used to uphold the guarantee that every message in the inbox can be understood by the receiver.
-Sending an actor a message of the wrong type will raise a compilation error.
-By using type-parameterized actor references,
-the receiver does not need to worry about unexpected messages,
-while senders can be sure that messages will be understood.
-
-For inboxes the subtype relation $A <: B$ says that every message in $A$ is also a valid message in $B$.
+For inboxes the subtype relation $A <: B$ says that
+every message in $A$ is also a valid message in $B$.
 It should therefore be possible to downcast a reference of type $B$ to a reference of type $A$,
 since every message sent to a reference of type $A$ will be a valid message in $B$.
-Actor references should thus be contravariant in its argument \parencite{DBLP:conf/ecoop/HeWT14}.
-The notion of a subtype for references is important to implement the pattern of sending a command together with what reference to reply to,
-since different actors receiving the reply will have different \AgdaRef[ActorMonad]{InboxShape}.
-This pattern, together with a filtering receive construct, can be used to implement synchronous calls \parencite{ericsson_gen}.
+As we can see, the subtype relation for references is reversed,
+and is thus contravariant in its argument \parencite{DBLP:conf/ecoop/HeWT14}.
+The notion of a subtype for references is important to implement
+the pattern of sending a command together with what reference to reply to,
+since different actors receiving the reply will have a different \AgdaRef[ActorMonad]{InboxShape}.
+This pattern, together with a filtering receive construct,
+can be used to implement synchronous calls \parencite{ericsson_gen}.
+%</ReferenceSubtype>
+%<*ActorPrecondition>
+It is crucial that actor references are completely unforgeable if type safety is to be preserved.
+If an actor is allowed to manufacture references on their own,
+every guarantee we have about message types becomes invalid and unusable.
+If either the name or the type of a reference can be controlled in user space,
+then it becomes possible to create references to inboxes that are incompatible
+and thus possible to send messages that will not be understood by the received.
+In an informal setting we could simply have hidden the constructor of actor references,
+i.e. by moving it to an internal module or marking it as abstract.
+That tactic is simple and pragmatic, but does not work in a formal setting like Agda.
+This posed a difficult problem in our implementation
+since we realized that we would need to make a major diversion from how
+references are handled by \textcite{DBLP:conf/ecoop/FowlerLW17}.
+
+When \textcite{DBLP:conf/ecoop/FowlerLW17} type terms,
+values and references are treated the same way.
+Since our model is an embedding in Agda,
+this would mean that both references and values are normal Agda terms.
+Initially we tried to follow this route by modelling references as a name tagged with a type.
+\AgdaCatch{Examples/Types}{ActorRef}
+One quickly realizes that this data-type is easily forged and, as said,
+hiding the constructor is not a good enough option.
+We also realized that it would not be possible to maintain any proofs of references being valid
+if we went this route, a problem related to how we incorporate Agda functions in the syntax.
+The solution that seemed to fit best in the setting of Agda
+is to treat references separately from values.
+This is because we need to maintain proofs about references being valid,
+while values are only restricted under Agda's usual typing rules.
+
+To guarantee that references are valid we do type checking of references manually.
+
+
+\begin{code}
+ReferenceTypes = List InboxShape
+
+_⊢_ : ReferenceTypes → InboxShape → Set₁
+Γ ⊢ T = T ∈ Γ
+
+\end{code}
+
+%</ActorPrecondition>
+
 
 To formalize the notion of a reference that can be sent in a message in place of a less demanding type,
 we create a variant of the \AgdaRef[ActorMonad]{_is-reference-in_} property.
@@ -119,16 +175,16 @@ The new property states that \AgdaSymbol{Fw} is a contravariant subtype to one o
 An actor with \AgdaRef[ActorMonad]{InboxShape} \AgdaSymbol{S} should thus be able to receive a message containing a reference of type \AgdaSymbol{Fw}
 and use it as if it was a reference of the type it wanted.
 
+\AgdaTarget{ReferenceTypes}
 \begin{code}
-record compatible-reference (pre : ReferenceTypes) (requested : InboxShape) : Set₁ where
+record compatible-reference (Γ : ReferenceTypes) (requested : InboxShape) : Set₁ where
   constructor [_]>:_
   field
     {actual} : InboxShape
-    actual-is-sendable : actual ∈ pre
+    actual-is-sendable : Γ ⊢ T actual
     actual-handles-requested : requested <: actual
 
 \end{code}
-%</ReferenceSubtype>
 %<*Messages>
 \begin{code}
 
@@ -234,7 +290,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- ValueMessage is indexed by the shape of the inbox we're sending to,
   -- which makes sure that it's not possible to send values of the wrong type.
   Send : ∀ {pre} → {ToIS : InboxShape} →
-    (canSendTo : ToIS ∈ pre) →
+    (canSendTo : pre ⊢ ToIS) →
     (msg : SendMessage ToIS pre) →
     ActorM IS ⊤₁ pre (λ _ → pre)
   -- Send a reference to an actor.
