@@ -466,7 +466,7 @@ name-fields : ∀ {MT store} → (pre : ReferenceTypes) →
                All named-field-content MT
 name-fields pre refs rhp [] eq = []
 name-fields _ refs rhp (_∷_ {ValueType x} (lift lower) sfc) refl = lower ∷ (name-fields _ refs rhp sfc refl)
-name-fields {store = store} _ refs rhp (_∷_ {ReferenceType x} px sfc) refl = name (lookup-reference _ refs rhp refl (compatible-reference.actual-is-sendable px)) ∷ (name-fields _ refs rhp sfc refl)
+name-fields {store = store} _ refs rhp (_∷_ {ReferenceType x} px sfc) refl = name (lookup-reference _ refs rhp refl (_⊢>:_.actual-is-sendable px)) ∷ (name-fields _ refs rhp sfc refl)
 
 name-fields-act : ∀ {MT} store → ∀ actor →
               All (send-field-content (pre actor)) MT →
@@ -526,20 +526,20 @@ valid++ (NamedM x x₁) v p = valid-fields x₁ v p
     valid-fields (_∷_ {ValueType x} px x₁) (_ , h) p ps = valid-fields x₁ h p ps
     valid-fields (_∷_ {ReferenceType x} px x₁) (hj , h) p ps = hj ∷ (valid-fields x₁ h p ps)
 
-open compatible-reference
+open _⊢>:_
 
 compatible-handles : ∀ store x refs
-                     (px : compatible-reference (map shape refs) x)
-                     (w : FoundReference store (compatible-reference.actual px)) →
+                     (px : (map shape refs) ⊢>: x)
+                     (w : FoundReference store (actual px)) →
                      x ⊆ actual (reference w)
 compatible-handles store x refs px w with (actual-handles-requested px)
 ... | a with (actual-handles-wanted (reference w))
 ... | b = ⊆-trans a b
 
 make-pointer-compatible : ∀ store x refs
-                       (px : compatible-reference (map shape refs) x) →
+                       (px : (map shape refs) ⊢>: x) →
                        (All (reference-has-pointer store) refs) →
-                       (w : FoundReference store (compatible-reference.actual px)) →
+                       (w : FoundReference store (actual px)) →
                        name w comp↦ x ∈ store
 make-pointer-compatible store x refs px rhp w = [p: actual-has-pointer (reference w) ][handles: compatible-handles store x refs px w ]
 
@@ -551,5 +551,5 @@ make-pointers-compatible store pre refs eq [] rhp = _
 make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = _ , (make-pointers-compatible store _ refs refl fields rhp)
 make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = make-pointer-compatible store x refs px rhp foundFw , (make-pointers-compatible store _ refs refl fields rhp)
   where
-    foundFw : FoundReference store (compatible-reference.actual px)
-    foundFw = lookup-reference _ refs rhp refl (compatible-reference.actual-is-sendable px)
+    foundFw : FoundReference store (actual px)
+    foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)

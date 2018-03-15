@@ -113,19 +113,6 @@ _<:_ = _⊆_ {A = MessageType}
 \end{code}
 %</InboxShapeSubtype>
 
-%<*ReferenceSubtype>
-For inboxes the subtype relation $A <: B$ says that
-every message in $A$ is also a valid message in $B$.
-It should therefore be possible to downcast a reference of type $B$ to a reference of type $A$,
-since every message sent to a reference of type $A$ will be a valid message in $B$.
-As we can see, the subtype relation for references is reversed,
-and is thus contravariant in its argument \parencite{DBLP:conf/ecoop/HeWT14}.
-The notion of a subtype for references is important to implement
-the pattern of sending a command together with what reference to reply to,
-since different actors receiving the reply will have a different \AgdaRef[ActorMonad]{InboxShape}.
-This pattern, together with a filtering receive construct,
-can be used to implement synchronous calls \parencite{ericsson_gen}.
-%</ReferenceSubtype>
 %<*ActorPrecondition>
 It is crucial that actor references are completely unforgeable if type safety is to be preserved.
 If an actor is allowed to manufacture references on their own,
@@ -152,39 +139,89 @@ We also realized that it would not be possible to maintain any proofs of referen
 if we went this route, a problem related to how we incorporate Agda functions in the syntax.
 The solution that seemed to fit best in the setting of Agda
 is to treat references separately from values.
-This is because we need to maintain proofs about references being valid,
+This comes from the fact that we need to maintain proofs about references being valid,
 while values are only restricted under Agda's usual typing rules.
 
-To guarantee that references are valid we do type checking of references manually.
+The way references are type checked is exactly how one would
+type check variables in any lambda calculus,
+i.e. by maintaining a variable typing context.
+This is commonly done by associating unique variable names to types.
+Variable names makes expressions easy to understand for humans,
+but pose two annoying problems: α-renaming and α-equivalence.
+α-equivalence is a form of equivalence that captures the intuition that the particular choice of
+a bound variable name does not usually matter \parencite{turbak2008design}.
+Renaming the variables of an expression in a way that preserves α-equivalence
+is called α-renaming \parencite{turbak2008design}.
+α-renaming is a part of the general concept of substitution,
+the operation of replacing free occurances of a varibale with an expression.
+The role of α-renaming in substituion is to avoid accidental variable name captures by renaming
+variables so that substitution does not change the meaning of functions \parencite{turbak2008design}.
 
+In order to avoid the problem of α-equivalence and α-renaming,
+a common formalization technique is the use of de Bruijn indices
+to represent variable binders \parencite{DBLP:journals/entcs/BerghoferU07}.
+A de Bruijn index is a natural number that represents an occurance of a variable in a λ-term,
+and denotes the number of binders that are in scope between that occurance
+and its corresponding binder.
+Following are some examples comparing a λ-calculus with names
+and a λ-calculus using de Bruijn indices.
 
+\begin{table}[]
+\centering
+\begin{tabular}{ll}
+Named                           & de Bruijn           \\
+$ λ x → x $                     & $ λ 1 $             \\
+$ λ x → λ y → x $               & $ λ λ 2 $           \\
+$ λ x → λ y → λ z → x z (y z) $ & $ λ λ λ 3 1 (2 1) $ \\         
+\end{tabular}
+\end{table}
+
+What makes de Bruijn indices easy to work with in Agda is that it lets us manage
+the variable typing context as a list of types, with variables / de Bruijn indices being
+indices into that list.
+We choose to represent the indices as the membership proposition
+in order to make the de Bruijn indices correct by construction.
+Thus we can define the type judgement $Γ ⊢ T$ as:
+
+\AgdaCatch{Membership}{ElementIn}
+\AgdaTarget{ReferenceTypes}
 \begin{code}
 ReferenceTypes = List InboxShape
+TypingContext = ReferenceTypes
 
-_⊢_ : ReferenceTypes → InboxShape → Set₁
+_⊢_ : TypingContext → InboxShape → Set₁
 Γ ⊢ T = T ∈ Γ
 
 \end{code}
-
 %</ActorPrecondition>
 
+%<*ReferenceSubtype>
+For inboxes the subtype relation $A <: B$ says that
+every message in $A$ is also a valid message in $B$.
+It should therefore be possible to downcast a reference of type $B$ to a reference of type $A$,
+since every message sent to a reference of type $A$ will be a valid message in $B$.
+We can see that the subtype relation for references is reversed,
+and is thus contravariant in its argument \parencite{DBLP:conf/ecoop/HeWT14}.
+We capture this property in a special version of the reference typing judgement,
+where $Γ ⊢>: T$ says that T is a subtype of some type in Γ.
 
-To formalize the notion of a reference that can be sent in a message in place of a less demanding type,
-we create a variant of the \AgdaRef[ActorMonad]{_is-reference-in_} property.
-The new property states that \AgdaSymbol{Fw} is a contravariant subtype to one of the references in \AgdaSymbol{S}.
-An actor with \AgdaRef[ActorMonad]{InboxShape} \AgdaSymbol{S} should thus be able to receive a message containing a reference of type \AgdaSymbol{Fw}
-and use it as if it was a reference of the type it wanted.
-
-\AgdaTarget{ReferenceTypes}
 \begin{code}
-record compatible-reference (Γ : ReferenceTypes) (requested : InboxShape) : Set₁ where
+record _⊢>:_ (Γ : TypingContext) (requested : InboxShape) : Set₁ where
   constructor [_]>:_
   field
     {actual} : InboxShape
-    actual-is-sendable : Γ ⊢ T actual
+    actual-is-sendable : Γ ⊢ actual
     actual-handles-requested : requested <: actual
 
 \end{code}
+
+The notion of a subtype for references is important to implement
+the pattern of sending a command together with what reference to reply to,
+since different actors receiving the reply will have a different \AgdaRef[ActorMonad]{InboxShape}.
+This pattern, together with a filtering receive construct,
+can be used to implement synchronous calls \parencite{ericsson_gen}.
+%</ReferenceSubtype>
+
 %<*Messages>
 \begin{code}
 
@@ -212,9 +249,9 @@ record compatible-reference (Γ : ReferenceTypes) (requested : InboxShape) : Set
 -- We could just have wrapped ValueMessage and ReferenceMessage,
 -- but that makes for a noisier experience when pattern matching in application code.
 
-send-field-content : ReferenceTypes → MessageField → Set₁
-send-field-content pre (ValueType A) = Lift A
-send-field-content pre (ReferenceType requested) = compatible-reference pre requested
+send-field-content : TypingContext → MessageField → Set₁
+send-field-content Γ (ValueType A) = Lift A
+send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 
 data SendMessage (To : InboxShape) (pre : ReferenceTypes) : Set₁ where
