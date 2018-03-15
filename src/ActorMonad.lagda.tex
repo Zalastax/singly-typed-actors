@@ -223,8 +223,8 @@ can be used to implement synchronous calls \parencite{ericsson_gen}.
 %</ReferenceSubtype>
 
 %<*Messages>
-A message is made of two parts: a selection of which type of message it is and instantiations
-of every field of the selected type.
+A message that is being sent is made of two parts: a selection of which type of message it is
+and instantiations of every field of the selected type.
 We index the type of a message by the type of inbox it is being sent to and incidentally by the
 variable typing context.
 Selecting which type variant this message has is done by indexing
@@ -232,25 +232,10 @@ into the \AgdaRef[ActorMonad]{InboxShape}, using the $∈$ property.
 The rest of the message is made up of instantiations of the fields
 from the selected \AgdaRef[ActorMonad]{MessageType}.
 For values, the instantiation of a field is simply an Agda term of the type specified by the field.
-
-
+For references, the instantiation is not a simple Agda term,
+but rather a variable in the reference context.
 
 \begin{code}
-
--- We can create a value message for an inbox of shape S,
--- if the type of the value is a value type for S.
-
--- We can create a reference message for an inbox of shape S,
--- if the type of the reference is a reference type for S.
---
--- When a reference message is received, the actors capabilities will increase,
--- allowing the actor to send messages to the actor referenced by the message.
---
-
--- A Message is either a value or a reference.
---
--- We could just have wrapped ValueMessage and ReferenceMessage,
--- but that makes for a noisier experience when pattern matching in application code.
 
 send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
@@ -258,7 +243,10 @@ send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
   SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To pre
+\end{code}
 
+\begin{code}
+  
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
@@ -328,6 +316,7 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
   -- available in the precondition.
   -- ValueMessage is indexed by the shape of the inbox we're sending to,
   -- which makes sure that it's not possible to send values of the wrong type.
+  -- \todo{refer to ACTORS, page 35}
   Send : ∀ {pre} → {ToIS : InboxShape} →
     (canSendTo : pre ⊢ ToIS) →
     (msg : SendMessage ToIS pre) →
