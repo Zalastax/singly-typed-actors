@@ -26,7 +26,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 
-The file postprocess-latex.pl (and the following
+The files postprocess-latex.pl and agda.sty (and the following
 license text?) uses the following license:
 
 Copyright (c) 2005-2017 remains with the authors.
