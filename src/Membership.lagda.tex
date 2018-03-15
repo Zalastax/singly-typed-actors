@@ -14,7 +14,7 @@ data _∈_ {a} {A : Set a} : A → (List A) -> Set a where
   Z : ∀ {x xs} → x ∈ (x ∷ xs)
   S : ∀ {x y xs} → x ∈ xs -> x ∈ (y ∷ xs)
 \end{code}
-%</ActorPrecondition>
+%</ElementIn>
 \begin{code}
 x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
 x∈[]-⊥ ()

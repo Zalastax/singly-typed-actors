@@ -223,12 +223,22 @@ can be used to implement synchronous calls \parencite{ericsson_gen}.
 %</ReferenceSubtype>
 
 %<*Messages>
+A message is made of two parts: a selection of which type of message it is and instantiations
+of every field of the selected type.
+We index the type of a message by the type of inbox it is being sent to and incidentally by the
+variable typing context.
+Selecting which type variant this message has is done by indexing
+into the \AgdaRef[ActorMonad]{InboxShape}, using the $∈$ property.
+The rest of the message is made up of instantiations of the fields
+from the selected \AgdaRef[ActorMonad]{MessageType}.
+For values, the instantiation of a field is simply an Agda term of the type specified by the field.
+
+
+
 \begin{code}
 
 -- We can create a value message for an inbox of shape S,
 -- if the type of the value is a value type for S.
--- data ValueMessage (S : InboxShape) : Set₁ where
---  Value : ∀ {A} → A is-value-in S → A → ValueMessage S
 
 -- We can create a reference message for an inbox of shape S,
 -- if the type of the reference is a reference type for S.
@@ -236,13 +246,6 @@ can be used to implement synchronous calls \parencite{ericsson_gen}.
 -- When a reference message is received, the actors capabilities will increase,
 -- allowing the actor to send messages to the actor referenced by the message.
 --
--- A reference message can be created without having a valid reference in the current context.
--- It is the constructors of ActorM (more specifically SendReference) that limits the sending
--- of references to only those that are valid in the current context.
---
--- We index ReferenceMessage by both the reference type and the receiver's inbox.
--- data ReferenceMessage (S Fw : InboxShape) : Set₁ where
---  Reference : Fw is->:-reference-in S → ReferenceMessage S Fw
 
 -- A Message is either a value or a reference.
 --
@@ -253,9 +256,8 @@ send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
-
-data SendMessage (To : InboxShape) (pre : ReferenceTypes) : Set₁ where
-  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content pre) MT → SendMessage To pre
+data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
+  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To pre
 
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
