@@ -67,11 +67,11 @@ simulate env with (acts env) | (actors-valid env)
 -- ===== OUT OF ACTORS =====
 simulate env | [] | _ = []
 simulate env | actor ∷ rest | _ with (actor-m actor)
--- ===== Value =====
+-- ===== Return =====
 -- If an actor returns a value but there is nothing that follows,
 -- then the actor is done and we can drop it from the list of actors.
 simulate env | actor ∷ rest | _ |
-  Value val = keep-simulating (Return (name actor)) (drop-top-actor env)
+  Return val = keep-simulating (Return (name actor)) (drop-top-actor env)
 -- ===== Bind =====
 simulate env | actor ∷ rest | _ | m >>= f with (♭ m)
 -- ===== Bind Value =====
@@ -80,7 +80,7 @@ simulate env | actor ∷ rest | _ | m >>= f with (♭ m)
 -- Recall that the precondition of a return is the same as the postcondition,
 -- so the available references does not change.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
-  Value val = keep-simulating (Bind (Return (name actor))) env'
+  Return val = keep-simulating (Bind (Return (name actor))) env'
   where
     bindAct : Actor
     bindAct = replace-actorM actor (♭ (f val))

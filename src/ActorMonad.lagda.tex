@@ -169,10 +169,10 @@ and a λ-calculus using de Bruijn indices.
 \begin{table}[]
 \centering
 \begin{tabular}{ll}
-Named                           & de Bruijn           \\
-$ λ x → x $                     & $ λ 1 $             \\
-$ λ x → λ y → x $               & $ λ λ 2 $           \\
-$ λ x → λ y → λ z → x z (y z) $ & $ λ λ λ 3 1 (2 1) $ \\         
+Named                                 & de Bruijn                 \\
+$ λ\ x → x $                          & $ λ\ 1 $                  \\
+$ λ\ x → λ\ y → x $                   & $ λ\ λ\ 2 $               \\
+$ λ\ x → λ\ y → λ\ z → x\ z\ (y\ z) $ & $ λ\ λ\ λ\ 3\ 1\ (2\ 1) $ \\         
 \end{tabular}
 \end{table}
 
@@ -234,6 +234,8 @@ from the selected \AgdaRef[ActorMonad]{MessageType}.
 For values, the instantiation of a field is simply an Agda term of the type specified by the field.
 For references, the instantiation is not a simple Agda term,
 but rather a variable in the reference context.
+The type of the selected reference variable must be compatible with the type that the receiver expects,
+i.e. the types have to have the correct subtype relation.
 
 \begin{code}
 
@@ -242,11 +244,21 @@ send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
-  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To pre
+  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
 \end{code}
 
+Somewhat surprisingly,
+a message that is received is not presented exactly the same as the message that was sent.
+Looking at the content of a reference field we might expect the content
+to be some representation of a reference, or perhaps an index into a variable context.
+Instead we find the unit type, which has no computational content at all.
+The answer to this puzzle lies in that receiving a message will have the side-effect of
+adding the references from every reference field to the variable context.
+It would be possible to make the reference field content be a de Bruijn index,
+but this would make the model slightly more complicated without making it more powerful.
+
 \begin{code}
-  
+
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
@@ -254,57 +266,82 @@ receive-field-content (ReferenceType Fw) = ⊤
 data Message (To : InboxShape) : Set₁ where
   Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
 
-\end{code}
-%</Messages>
-\begin{code}
-
--- Simple lifting of ⊤ to reduce noise when the monad returns ⊤
-⊤₁ : Set₁
-⊤₁ = Lift ⊤
-
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
 extract-references (ValueType x ∷ mt) = extract-references mt
 extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 
--- When a message is received, we increase our capabilities iff the message is a reference.
-add-references : ∀ {To} → ReferenceTypes → Message To → ReferenceTypes
-add-references {To} pre (Msg {MT} x x₁) = extract-references MT ++ pre
-
-
+add-references : ∀ {To} → TypingContext → Message To → TypingContext
+add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
+\end{code}
+%</Messages>
+\begin{code}
 infixl 1 _>>=_
+\end{code}
+%<*LiftTop>
+\begin{code}
+-- Simple lifting of ⊤ to reduce noise when the monad returns ⊤
+⊤₁ : Set₁
+⊤₁ = Lift ⊤
+\end{code}
+%</LiftTop>
 
--- An Actor is modeled as a monad.
---
--- It is indexed by the shape of its inbox, which can't change over the course of its life-time.
---
---
--- 'A' is the return value of the monad.
---
--- 'pre' is the precondition on the list of references that are available.
--- The precondition is what limits an actor to only being able to send messages
--- to actors that it has a reference to.
--- Sending a message is done by indexing into 'es',
--- thereby proving that the actor has a reference to the actor
--- that it's sending the message to.
---
--- 'post' is the postcondition on the list of references.
--- The postcondition sometimes depends on what happens during runtime,
--- and is thus modelled as a function on 'A'.
--- 'post' is what enables receive to have the right type.
+%<*ActorMonad>
+This thesis originally started out with the goal of formalizing a λ-calculus for actors that
+\textcite{DBLP:conf/ecoop/FowlerLW17} call λ_{act}.
+When investigating λ_{act} we noticed that the language had a structure that made it suitable
+for being directly embedded in Agda,
+as opposed to the external λ-calculus we originally envisioned.
+What we had found was that the processes of λ_{act} were instances of the monad pattern.
+When reading \posscite{DBLP:conf/ecoop/FowlerLW17} section on selective receive,
+it became apparent that an embedding in Agda would have a clear advantage over a simple λ-calculus.
+What \textcite{DBLP:conf/ecoop/FowlerLW17} show about selective receive is that if the host language
+is sufficiently advanced, then selective receive can be implemented as a library;
+this made the choice of Agda as the host language easy.
+
+The goal when translating λ_{act} to an Agda embedding was to make the actors correct by construction,
+and to make it possible to type-check each actor separately.
+The pattern that emerged is a monad parameterized by the type of the actor's
+inbox (\AgdaRef[ActorMonad]{InboxShape}) and indexed by a reference variable context.
+Following \textcite{DBLP:conf/ecoop/FowlerLW17}, the \AgdaRef[ActorMonad]{InboxShape} of an actor is
+constant over its lifetime and should be likened with the type-and-effect system of λ_{act}.
+Each actor has their own reference variable context and the way it changes over time
+is kept track of in the style of the parameterized monad pattern,
+capturing preconditions and postconditions in the type.
+
+\AgdaTarget{ActorM}
+\begin{code}
 data ActorM (IS : InboxShape) : (A : Set₁) →
               (pre : ReferenceTypes) →
               (post : A → ReferenceTypes) →
               Set₂ where
-  -- Value is also known as return.
-  -- The precondition is the same as the assignment axiom schema in Hoare logic.
-  Value : ∀ {A post} → (val : A) → ActorM IS A (post val) post
-  -- Bind / composition
-  -- This is the same as the rule of composition in Hoare logic.
-  -- post₁ is the midcondition.
-  _>>=_ : ∀ {A B pre post₁ post₂} → (m : ∞ (ActorM IS A pre post₁)) →
-          (f : (x : A) → ∞ (ActorM IS B (post₁ x) (post₂))) →
-          ActorM IS B pre post₂
+\end{code}
+%</ActorMonad>
+%<*ActorMonadBindReturn>
+Return and bind of the actor monad uses the invariants that are expected from any parameterized
+monad, which you can read about in section \ref{parameterized_monads}.
+The sub-computations of bind are unusual though, in that they use coinduction.
+Coinduction provides support for "infinitely large" computations,
+so that actors can perform loops or run forever.
+The choice of using Agda's old style of coinduction is incidental,
+and it should be possible to replace it with the modern style coinductive record.
+We don't give the Return constructor the name return,
+since we want return to be a coinductive \AgdaRef[ActorMonad]{ActorM} and 
+the constructors of \AgdaRef[ActorMonad]{ActorM} can't return an $∞ ActorM$.
+Instead, the actual return is defined as a separate function that wraps Return in a thunk.
+
+\begin{code}
+  
+  Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
+  
+  _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →
+  (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
+  ActorM IS B pre post
+\end{code}
+%</ActorMonadBindReturn>
+%<*ActorMonadRest>
+\begin{code}
+  
   -- Spawn a new actor.
   -- The spawned actor does not know any references.
   -- The reference to the spawned actor is added to the parent actor.
@@ -353,13 +390,18 @@ data ActorM (IS : InboxShape) : (A : Set₁) →
     ActorM IS A xs post
   -- Adds the reference to this actor to its available references.
   Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
+\end{code}
+%</ActorMonadRest>
+
+\begin{code}
+
 --
 -- ========== Helpers for ActorM ==========
 --
 
 -- coinduction helper for Value
 return₁ : {A : Set (suc zero)} → ∀ {IS post} → (val : A) → ∞ (ActorM IS A (post val) post)
-return₁ val = ♯ Value val
+return₁ val = ♯ Return val
 
 -- universe lifting for return₁
 return : {A : Set} → ∀ {IS post} → (val : A) → ∞ (ActorM IS (Lift A) (post (lift val)) post)
