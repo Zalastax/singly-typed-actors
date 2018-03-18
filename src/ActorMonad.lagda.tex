@@ -326,19 +326,18 @@ so that actors can perform loops or run forever.
 The choice of using Agda's old style of coinduction is incidental,
 and it should be possible to replace it with the modern style coinductive record.
 We don't give the Return constructor the name return,
-since we want return to be a coinductive \AgdaRef[ActorMonad]{ActorM} and 
+since we want return to be a coinductive \AgdaRef[ActorMonad]{ActorM} and
 the constructors of \AgdaRef[ActorMonad]{ActorM} can't return an $∞ ActorM$.
 Instead, the actual return is defined as a separate function that wraps Return in a thunk.
 
 \begin{code}
-  
   Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
-  
   _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →
-  (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
-  ActorM IS B pre post
+    (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
+    ActorM IS B pre post
 \end{code}
 %</ActorMonadBindReturn>
+
 %<*ActorMonadRest>
 \begin{code}
   
@@ -379,17 +378,16 @@ Instead, the actual return is defined as a separate function that wraps Return i
   -- Sending a message to a blocked actor will move the actor from the 'blocked queue' back to the
   -- active actors.
   Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
+  -- Adds the reference to this actor to its available references.
+  Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
   -- Lift let's you call a sub-program that needs less references than what is currently available.
   -- To allow that a lifted program increases the available references,
   -- the postcondition of the resulting actor is the same as the postcondition of the lifted program.¨
   -- We'd like there to be a way of re-adding the forgotten references, but that's easy to implement.
   -- To implement re-adding references we'd have to carry around what references to re-add when the
   -- lifted part is finished.
-  ALift   : ∀ {A ys post xs} → (inc : ys ⊆ xs) →
-    ∞ (ActorM IS A ys post) →
-    ActorM IS A xs post
-  -- Adds the reference to this actor to its available references.
-  Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
+  Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
+    ActorM IS ⊤₁ xs (λ _ → ys)
 \end{code}
 %</ActorMonadRest>
 
@@ -425,6 +423,9 @@ canSendTo ![t: p ] fields = ♯ Send canSendTo (SendM p fields)
 receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-references pre))
 receive = ♯ Receive
 
+
+strengthen : ∀ {IS xs ys} → ys ⊆ xs → ∞ (ActorM IS ⊤₁ xs (λ _ → ys))
+strengthen inc = ♯ Strengthen inc
 
 ⊠-of-values : List Set → InboxShape
 ⊠-of-values [] = []

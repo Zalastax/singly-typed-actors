@@ -53,7 +53,7 @@ pingMainActor A = ActorM Pingbox A PingRefs constPingrefs
 mutual
   pingReceive : (msg : Message Pingbox) → ∞ (ActorM Pingbox (Lift Bool) (add-references PingRefs msg) constPingrefs)
   pingReceive (Msg Z (b ∷ [])) = return b
-  pingReceive (Msg (S Z) _) = ♯ ALift (S Z ∷ []) loopTillPingValue
+  pingReceive (Msg (S Z) _) = ♯ (strengthen (S Z ∷ []) >>= λ _ → loopTillPingValue)
   pingReceive (Msg (S (S ())) x₁)
 
   loopTillPingValue : ∞ (pingMainActor (Lift Bool))
@@ -82,7 +82,7 @@ pongMainActor A = ActorM Pongbox A PongRefs constPongrefs
 mutual
   pongReceive : (msg : Message Pongbox) → ∞ (ActorM Pongbox (Lift ℕ) (add-references PongRefs msg) constPongrefs)
   pongReceive (Msg Z (n ∷ [])) = return n
-  pongReceive (Msg (S Z) _) = ♯ ALift (S Z ∷ []) loopTillPongValue
+  pongReceive (Msg (S Z) _) = ♯ (strengthen (S Z ∷ []) >>= λ _ → loopTillPongValue)
   pongReceive (Msg (S (S ())) _)
   loopTillPongValue : ∞ (pongMainActor (Lift ℕ))
   loopTillPongValue = ♯ (receive >>= pongReceive)

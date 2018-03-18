@@ -30,7 +30,7 @@ call : ∀ {Γ MtTo MtIn} {To IS IS' : InboxShape} → (q : List (Message IS)) �
        (ActorM IS (SelRec IS (call-select ISsubs whichIn)) (Γ ++ (waiting-refs q)) (λ m → (add-references Γ (msg m)) ++ (waiting-refs (waiting m))))
 call {Γ} {IS = IS} q var toFi vals sub whichIn = ♯ Self >>= λ _ →
   ♯ ((S (translate-⊆ (⊆++-refl Γ (waiting-refs q)) var) ![t: toFi ] (([ Z ]>: sub) ∷ translate-fields vals)) >>= λ _ →
-  ♯ ALift (⊆-suc ⊆-refl) (♯ selective-receive q (call-select sub whichIn)))
+  ♯ (strengthen (⊆-suc ⊆-refl) >>= λ _ → (♯ selective-receive q (call-select sub whichIn))))
   where
     translate-fields : ∀ {MT} → All (send-field-content  Γ) MT → All (send-field-content (IS ∷ Γ ++ waiting-refs q)) MT
     translate-fields {[]} [] = []
@@ -45,7 +45,7 @@ calculatorActor = loop >>= return₁
   where
     loop : ∞ (ActorM Calculator (Lift ⊤) [] (λ _ → []))
     loop = ♯ (receive >>= λ {
-      (Msg Z (_ ∷ n ∷ m ∷ [])) → ♯ ((Z ![t: Z ] ((lift (n + m)) ∷ [])) >>= λ _ → ♯ ALift [] loop)
+      (Msg Z (_ ∷ n ∷ m ∷ [])) → ♯ ((Z ![t: Z ] ((lift (n + m)) ∷ [])) >>= λ _ → ♯ (strengthen [] >>= λ _ → loop))
       ; (Msg (S ()) x₁)
       })
 
@@ -55,7 +55,7 @@ TestBox = ((ValueType ℕ ∷ [])) ∷ [] ∷ []
 calltestActor : ActorM TestBox (Lift ℕ) [] (λ _ → [])
 calltestActor = spawn calculatorActor >>= (λ _ →
             ♯ (_>>=_ { mid = λ m → add-references (Calculator ∷ []) (msg m) ++ waiting-refs (waiting m)}
-              (♯ (call [] Z Z ((lift 10) ∷ ((lift 32) ∷ []))) (Z ∷ []) Z)  λ x → ♯ ALift [] (return-result x)))
+              (♯ (call [] Z Z ((lift 10) ∷ ((lift 32) ∷ []))) (Z ∷ []) Z)  λ x → ♯ ( strengthen [] >>= λ _ → (return-result x))))
   where
     return-result : SelRec TestBox (call-select (Z ∷ []) Z) → ∞ (ActorM TestBox (Lift ℕ) [] (λ _ → []))
     return-result record { msg = (Msg Z (px ∷ x₁)) ; right-msg = right-msg ; waiting = waiting } = return px

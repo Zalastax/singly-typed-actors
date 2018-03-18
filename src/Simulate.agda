@@ -31,7 +31,7 @@ data Trace : Set where
   Spawn : (spawner : Name) → (spawned : Name) → Trace
   Send : (sender : Name) → (receiver : Name) → (references : List Name) → Trace
   Receive : Name → ReceiveKind → Trace
-  TLift : Name → Trace
+  Strengthen  : Name → Trace
   Self : Name → Trace
 
 -- A step in the simulation is the next environment paired up with what step was taken
@@ -232,14 +232,15 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- To bind a lift we just perform the lifting of the actor and rewrap it in the same bind, like so:
 -- ((Lift x) >>= f) ⇒ liftedX >>= f
 simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
-  ALift {B} {esX} {postX} inc x with (♭ x)
-... | bx = keep-simulating (Bind (TLift (name actor))) env'
+  Strengthen {ys} {xs} inc = keep-simulating (Bind (Strengthen (name actor))) env'
   where
     liftedRefs = lift-references inc (references actor) (pre-eq-refs actor)
-    liftedBx : ActorM (inbox-shape actor) B (map shape (contained liftedRefs)) postX
-    liftedBx rewrite (sym (contained-eq-inboxes liftedRefs)) = bx
+    strengthenedM : ActorM (inbox-shape actor) ⊤₁ (map shape (contained liftedRefs)) (λ _ → ys)
+    strengthenedM rewrite (sym (contained-eq-inboxes liftedRefs)) = Return _
+    -- liftedBx : ActorM (inbox-shape actor) B (map shape (contained liftedRefs)) postX
+    -- liftedBx rewrite (sym (contained-eq-inboxes liftedRefs)) = bx
     bindAct : Actor
-    bindAct = lift-actor actor (contained liftedRefs) refl (♯ liftedBx >>= f)
+    bindAct = lift-actor actor (contained liftedRefs) refl (♯ strengthenedM >>= f)
     bindActValid : ValidActor (store env) bindAct
     bindActValid = record { actor-has-inbox = actor-has-inbox valid
                           ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid) }
@@ -296,19 +297,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
 -- Just performs the lifting by translating a subset for preconditions
 -- to a subset for references.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
-  ALift inc x with (♭ x)
-... | bx = keep-simulating (TLift (name actor)) env'
-  where
-    liftedRefs = lift-references inc (references actor) (pre-eq-refs actor)
-    bxLifted : Actor
-    bxLifted = lift-actor actor (contained liftedRefs) (sym (contained-eq-inboxes liftedRefs)) bx
-    bxValid : ValidActor (store env) bxLifted
-    bxValid = record {
-      actor-has-inbox = actor-has-inbox valid
-      ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid)
-      }
-    env' : Env
-    env' = replace-actors env (bxLifted ∷ rest) (bxValid ∷ restValid)
+  Strengthen inc = keep-simulating (Strengthen (name actor)) (drop-top-actor env)
 -- Self without a following bind is like return,
 -- so just drop the actor.
 simulate env | actor@(_) ∷ rest | valid ∷ restValid |
