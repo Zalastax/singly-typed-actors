@@ -1,6 +1,6 @@
-module Runtime where
-open import Simulate
-open import SimulationEnvironment
+module Selective.Runtime where
+open import Selective.Simulate
+open import Selective.SimulationEnvironment
 
 open import Data.Colist using (Colist ; [] ; _∷_)
 open import Data.List using (List ; _∷_ ; [] ; map ; length)
@@ -42,6 +42,9 @@ show-trace (Send sender receiver references) = (show sender) ++ " sent a referen
 show-trace (Receive name Nothing) = (show name) ++ " received nothing. It was put in the blocked list"
 show-trace (Receive name (Value references)) = (show name) ++ " received a message forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Dropped) = (show name) ++ " received something, but had no bind. It was dropped"
+show-trace (Selective name Nothing) = (show name) ++ " selective-received nothing. It was put in the blocked list"
+show-trace (Selective name (Value references)) = (show name) ++ " selective-received a message forwarding [" ++ showNames references ++ "]"
+show-trace (Selective name Dropped) = (show name) ++ " selective-received something, but had no bind. It was dropped"
 show-trace (Strengthen name) = (show name) ++ " was strengthened"
 show-trace (Self name) = (show name ++ " used self")
 
