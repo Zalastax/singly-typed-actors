@@ -19,6 +19,10 @@ generated-main:
 	sed 's/__ENTRY__/$(ENTRY)/' src/Examples/Main-template.agda > src/Examples/Main-generated.agda
 	stack exec agda -- -c src/Examples/Main-generated.agda
 
+selective-generated-main:
+	sed 's/__ENTRY__/$(ENTRY)/' src/Selective/Examples/Main-template.agda > src/Selective/Examples/Main-generated.agda
+	stack exec agda -- -c src/Selective/Examples/Main-generated.agda
+
 clean:
 ifneq ($(strip $(agda-objects)),)
 	rm $(agda-objects)

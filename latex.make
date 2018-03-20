@@ -1,6 +1,6 @@
 include .rc.make
 
-subdirs := src/ src/Examples/
+subdirs := src/ src/Examples/ src/Selective/ src/Selective/Examples/
 sources := $(wildcard $(subdirs:%=%*.lagda.tex))
 renamed := $(sources:%.lagda.tex=%.tex)
 moved   := $(renamed:src/%=$(LATEX-OUTPUT-DIR)%)

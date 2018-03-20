@@ -1,0 +1,163 @@
+\begin{code}
+module Selective.ActorMonad where
+open import Membership using (_∈_ ; _⊆_ ; ⊆-refl ; Z ; S ; find-∈)
+
+open import Data.List using (List ; [] ; _∷_ ; _++_)
+open import Data.List.All using (All ; [] ; _∷_)
+open import Data.Unit using (⊤ ; tt)
+open import Data.Bool using (Bool ; true ; false)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
+
+open import Coinduction using (∞ ; ♯_ ; ♭)
+open import Level using (Lift ; lift ; suc ; zero)
+
+mutual
+  data MessageField : Set₁ where
+    ValueType : Set → MessageField
+    ReferenceType : InboxShape → MessageField
+
+  MessageType = List MessageField
+
+  InboxShape = List MessageType
+
+_<:_ = _⊆_ {A = MessageType}
+
+ReferenceTypes = List InboxShape
+TypingContext = ReferenceTypes
+
+_⊢_ : TypingContext → InboxShape → Set₁
+Γ ⊢ T = T ∈ Γ
+
+record _⊢>:_ (Γ : TypingContext) (requested : InboxShape) : Set₁ where
+    constructor [_]>:_
+    field
+      {actual} : InboxShape
+      actual-is-sendable : Γ ⊢ actual
+      actual-handles-requested : requested <: actual
+
+send-field-content : TypingContext → MessageField → Set₁
+send-field-content Γ (ValueType A) = Lift A
+send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
+
+data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
+  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
+
+receive-field-content : MessageField → Set
+receive-field-content (ValueType A) = A
+receive-field-content (ReferenceType Fw) = ⊤
+
+data Message (To : InboxShape) : Set₁ where
+  Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
+
+extract-references : MessageType → ReferenceTypes
+extract-references [] = []
+extract-references (ValueType x ∷ mt) = extract-references mt
+extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
+
+add-references : ∀ {To} → TypingContext → Message To → TypingContext
+add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
+
+\end{code}
+%<*MessageFilter>
+\begin{code}
+MessageFilter : (IS : InboxShape) → Set₁
+MessageFilter IS = Message IS → Bool
+\end{code}
+%</MessageFilter>
+
+%<*SelectedMessage>
+\begin{code}
+record SelectedMessage {IS : InboxShape} (f : MessageFilter IS) : Set₁ where
+  field
+    msg : Message IS
+    msg-ok : f msg ≡ true
+\end{code}
+%</SelectedMessage>
+
+%<*SelectedMessageAddReferences>
+\begin{code}
+add-selected-references : TypingContext → ∀ {IS} {filter : MessageFilter IS} →
+                            SelectedMessage filter → TypingContext
+add-selected-references Γ m = add-references Γ (SelectedMessage.msg m)
+\end{code}
+%</SelectedMessageAddReferences>
+\begin{code}
+
+
+⊤₁ : Set₁
+⊤₁ = Lift ⊤
+
+infixl 1 _>>=_
+
+data ActorM (IS : InboxShape) : (A : Set₁) →
+                (pre : ReferenceTypes) →
+                (post : A → ReferenceTypes) →
+                Set₂ where
+    Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
+    _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →
+        (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
+        ActorM IS B pre post
+    Spawn : {NewIS : InboxShape} → {A : Set₁} → ∀ {pre postN} →
+        ActorM NewIS A [] postN →
+        ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre
+    Send : ∀ {pre} → {ToIS : InboxShape} →
+        (canSendTo : pre ⊢ ToIS) →
+        (msg : SendMessage ToIS pre) →
+        ActorM IS ⊤₁ pre (λ _ → pre)
+    Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
+\end{code}
+%<*SelectiveReceiveConstruct>
+\begin{code}
+    SelectiveReceive : ∀ {pre} → (filter : MessageFilter IS) →
+      ActorM IS (SelectedMessage filter) pre (add-selected-references pre)
+\end{code}
+%</SelectiveReceiveConstruct>
+\begin{code}
+    Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
+    Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
+        ActorM IS ⊤₁ xs (λ _ → ys)
+
+--
+-- ========== Helpers for ActorM ==========
+--
+
+-- coinduction helper for Value
+return₁ : {A : Set (suc zero)} → ∀ {IS post} → (val : A) → ∞ (ActorM IS A (post val) post)
+return₁ val = ♯ Return val
+
+-- universe lifting for return₁
+return : {A : Set} → ∀ {IS post} → (val : A) → ∞ (ActorM IS (Lift A) (post (lift val)) post)
+return val = return₁ (lift val)
+
+-- coinduction helper for spawn
+spawn : ∀ {IS NewIS A pre postN} →
+    ActorM NewIS A [] postN →
+    ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
+spawn newAct = ♯ Spawn newAct
+
+-- spawn potentially infinite actors
+spawn∞ : ∀ {IS NewIS A pre postN} →
+    ∞ (ActorM NewIS A [] postN) →
+    ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
+spawn∞ newAct = spawn (♭ newAct)
+
+-- coinduction helper and neater syntax for message sending
+_![t:_]_ : ∀ {IS ToIS pre MT} →
+    (canSendTo : ToIS ∈ pre) →
+    (MT ∈ ToIS) →
+    All (send-field-content pre) MT →
+    ∞ (ActorM IS ⊤₁ pre (λ _ → pre))
+canSendTo ![t: p ] fields = ♯ Send canSendTo (SendM p fields)
+
+-- coinduction helper for Receive
+receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-references pre))
+receive = ♯ Receive
+
+-- coinduction helper for Strengthen
+strengthen : ∀ {IS xs ys} → ys ⊆ xs → ∞ (ActorM IS ⊤₁ xs (λ _ → ys))
+strengthen inc = ♯ Strengthen inc
+
+⊠-of-values : List Set → InboxShape
+⊠-of-values [] = []
+⊠-of-values (x ∷ vs) = (ValueType x ∷ []) ∷ ⊠-of-values vs
+\end{code}

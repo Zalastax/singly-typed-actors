@@ -5,6 +5,10 @@ open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; false ; true)
 open import Data.Nat using (ℕ ; zero ; suc)
 open import Data.Vec using (Vec ; [] ;  _∷_)
+open import Data.List using (List ; [] ; _∷_)
+open import Data.String using (String)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+open import ActorMonad
 
 \end{code}
 
@@ -14,3 +18,38 @@ unfortunate : Set
 unfortunate = ℕ → ℕ
 \end{code}
 %</unfortunate>
+
+\begin{code}
+Name = ℕ
+\end{code}
+%<*ActorRef>
+\begin{code}
+data ActorRef : (InboxType : Set) → Set where
+    create-actor-ref : ∀ {A} → Name → ActorRef A
+\end{code}
+%</ActorRef>
+
+%<*ExampleInbox>
+\AgdaTarget{TestInbox}
+\begin{code}
+TestInbox : InboxShape
+TestInbox = (ValueType Bool ∷ [])
+            ∷ ( ReferenceType (
+                    (ValueType String ∷ [])
+                    ∷ (ValueType Bool ∷ [])
+                    ∷ [])
+                ∷ ValueType ℕ
+                ∷ [])
+            ∷ []
+\end{code}
+%</ExampleInbox>
+
+%<*PartialFunction>
+\begin{code}
+partial : (n : ℕ) → (n ≡ 2) → Bool
+partial 0 ()
+partial 1 ()
+partial 2 p =  false
+partial (suc (suc (suc n))) ()
+\end{code}
+%</PartialFunction>

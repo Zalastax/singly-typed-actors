@@ -1,4 +1,4 @@
-{-# OPTIONS --allow-unsolved-metas #-}
+\begin{code}
 module Membership where
 -- open import Data.List.Any.Membership.Propositional public
 
@@ -7,11 +7,15 @@ open import Data.List.Any using ()
 open import Data.List.All using (All ; [] ; _∷_)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
 open import Data.Empty using (⊥)
-
+\end{code}
+%<*ElementIn>
+\begin{code}
 data _∈_ {a} {A : Set a} : A → (List A) -> Set a where
   Z : ∀ {x xs} → x ∈ (x ∷ xs)
   S : ∀ {x y xs} → x ∈ xs -> x ∈ (y ∷ xs)
-
+\end{code}
+%</ElementIn>
+\begin{code}
 x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
 x∈[]-⊥ ()
 
@@ -67,3 +71,4 @@ All-⊆ (x₁ ∷ subs) pys = lookup-all x₁ pys ∷ All-⊆ subs pys
 ⊆-trans : ∀ {a} {A : Set a} {as bs cs : List A} → as ⊆ bs → bs ⊆ cs → as ⊆ cs
 ⊆-trans [] _ = []
 ⊆-trans (x₁ ∷ asbs) bscs = (translate-⊆ bscs x₁) ∷ (⊆-trans asbs bscs)
+\end{code}

@@ -1,6 +1,6 @@
-module EnvironmentOperations where
-open import ActorMonad
-open import SimulationEnvironment
+module Selective.EnvironmentOperations where
+open import Selective.ActorMonad
+open import Selective.SimulationEnvironment
 open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans ; find-∈)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
@@ -13,11 +13,12 @@ open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Empty using (⊥ ; ⊥-elim)
+open import Data.Bool using (Bool ; true ; false)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans ; inspect ; [_])
 open import Relation.Nullary using (Dec ; yes ; no)
 
-open import Level using (Lift ; lift)
+open import Level using (Lift ; lift ; Level) renaming (suc to lsuc)
 
 open Actor
 open ValidActor
@@ -553,3 +554,43 @@ make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) r
   where
     foundFw : FoundReference store (actual px)
     foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
+
+record SplitList {a : Level} {A : Set a} (ls : List A) : Set (lsuc a) where
+  field
+    heads : List A
+    el : A
+    tails : List A
+    is-ls : (heads) ++ (el ∷ tails) ≡ ls
+
+data FoundInList {a : Level} {A : Set a} (ls : List A) (f : A → Bool) : Set (lsuc a) where
+  Found : (split : SplitList ls) → (f (SplitList.el split) ≡ true) → FoundInList ls f
+  Nothing : FoundInList ls f
+
+find-split : {a : Level} {A : Set a} (ls : List A) (f : A → Bool) → FoundInList ls f
+find-split [] f = Nothing
+find-split (x ∷ ls) f with (f x) | (inspect f x)
+... | false | p = add-x (find-split ls f)
+  where
+    add-x : FoundInList ls f → FoundInList (x ∷ ls) f
+    add-x (Found split x₁) = Found (record { heads = x ∷ heads split ; el = el split ; tails = tails split ; is-ls = cong (_∷_ x) (is-ls split) }) x₁
+      where open SplitList
+    add-x Nothing = Nothing
+... | true | [ eq ] = Found (record { heads = [] ; el = x ; tails = ls ; is-ls = refl }) eq
+
+-- Removes the next message from an inbox.
+-- This is a no-op if there are no messages in the inbox.
+remove-found-message : {S : InboxShape} → {store : Store} → (filter : MessageFilter S) → (ValidMessageList store S → ValidMessageList store S)
+remove-found-message f record { inbox = [] ; valid = [] } = record { inbox = [] ; valid = [] }
+remove-found-message {s} {store} f record { inbox = (x ∷ inbox₁) ; valid = vx ∷ valid₁ } with (f (unname-message x))
+... | false = add-x (remove-found-message f (record { inbox = inbox₁ ; valid = valid₁ }))
+  where
+    add-x : ValidMessageList store s → ValidMessageList store s
+    add-x record { inbox = inbox ; valid = valid } = record { inbox = x ∷ inbox ; valid = vx ∷ valid }
+... | true = record { inbox = inbox₁ ; valid = valid₁ }
+
+split-all-el : ∀ {a p} {A : Set a} {P : A → Set p} (ls : List A) → All P ls → (sl : SplitList ls) → (P (SplitList.el sl))
+split-all-el [] ps record { heads = [] ; el = el ; tails = tails ; is-ls = () }
+split-all-el [] ps record { heads = (x ∷ heads) ; el = el ; tails = tails ; is-ls = () }
+split-all-el (x ∷ ls) (px ∷ ps) record { heads = [] ; el = .x ; tails = .ls ; is-ls = refl } = px
+split-all-el (x ∷ ls) (px ∷ ps) record { heads = (x₁ ∷ heads) ; el = el ; tails = tails ; is-ls = refl } =
+  split-all-el ls ps (record { heads = heads ; el = el ; tails = tails ; is-ls = refl })
