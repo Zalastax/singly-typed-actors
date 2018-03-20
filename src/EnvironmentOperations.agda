@@ -39,7 +39,7 @@ new-actor {IS} {A} {post} m name = record
                                         }
 
 -- An actor can be lifted to run sub-programs that need less references
-lift-actor : (actor : Actor) → {pre : ReferenceTypes} → (references : Store) →
+lift-actor : (actor : Actor) → {pre : TypingContext} → (references : Store) →
               (pre-eq-refs : (map shape references) ≡ pre) →
               ActorM (inbox-shape actor) (A actor) pre (post actor) → Actor
 lift-actor actor {pre} references pre-eq-refs m = record
@@ -358,7 +358,7 @@ record FoundReference (store : Store) (S : InboxShape) : Set₂ where
     name : Name
     reference : name comp↦ S ∈ store
 
-lookup-reference : ∀ {store ToIS} → (pre : ReferenceTypes) → (refs : List NamedInbox) → All (reference-has-pointer store) refs → map shape refs ≡ pre → ToIS ∈ pre → FoundReference store ToIS
+lookup-reference : ∀ {store ToIS} → (pre : TypingContext) → (refs : List NamedInbox) → All (reference-has-pointer store) refs → map shape refs ≡ pre → ToIS ∈ pre → FoundReference store ToIS
 lookup-reference [] refs prfs eq ()
 lookup-reference (x ∷ pre₁) [] prfs () Z
 lookup-reference (x ∷ pre₁) [] prfs () (S px)
@@ -382,7 +382,7 @@ translate-message-pointer : ∀ {ToIS A store} →
   A ∈ (actual (reference w))
 translate-message-pointer w x = translate-⊆ (actual-handles-wanted (reference w)) x
 
-record LiftedReferences (lss gss : ReferenceTypes) (references : List NamedInbox) : Set₂ where
+record LiftedReferences (lss gss : TypingContext) (references : List NamedInbox) : Set₂ where
   field
     subset-inbox : lss ⊆ gss
     contained : List NamedInbox
@@ -412,7 +412,7 @@ lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs 
     contained-el-shape = shape contained-el
     contained-el-ok : y ≡ contained-el-shape
     contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
-    combine : (a b : InboxShape) → (as bs : ReferenceTypes) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
+    combine : (a b : InboxShape) → (as bs : TypingContext) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
     combine a .a as .as refl refl = refl
 
 -- We can replace the actors in an environment if they all are valid for the current store.
@@ -458,7 +458,7 @@ remove-message : {S : InboxShape} → {store : Store} → (ValidMessageList stor
 remove-message vml = record { inbox = drop 1 (inbox vml) ; valid = drop⁺ 1 (ValidMessageList.valid vml) }
 
 
-name-fields : ∀ {MT store} → (pre : ReferenceTypes) →
+name-fields : ∀ {MT store} → (pre : TypingContext) →
                (refs : List NamedInbox) →
                All (reference-has-pointer store) refs →
                All (send-field-content pre) MT →

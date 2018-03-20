@@ -323,8 +323,8 @@ capturing preconditions and postconditions in the type.
 \AgdaTarget{ActorM}
 \begin{code}
 data ActorM (IS : InboxShape) : (A : Set₁) →
-              (pre : ReferenceTypes) →
-              (post : A → ReferenceTypes) →
+              (pre : TypingContext) →
+              (post : A → TypingContext) →
               Set₂ where
 \end{code}
 %</ActorMonad>

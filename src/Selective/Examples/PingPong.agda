@@ -45,7 +45,7 @@ mutual
   Pongbox = (ValueType ℕ ∷ []) ∷ (ReferenceType (⊠-of-values PingValues) ∷ []) ∷ []
 
 
-constPingrefs : {A : Set₁} → (A → ReferenceTypes)
+constPingrefs : {A : Set₁} → (A → TypingContext)
 constPingrefs _ =  PingRefs
 
 pingMainActor : (A : Set₁) → Set₂
@@ -74,7 +74,7 @@ pinger = loopTillPong >>= (λ _ → pingMain 0)
       { (lift false) → ♯ ( (Z ![t: Z ] (lift n ∷ [])) >>= λ _ → pingMain (suc n))
       ; (lift true) → return _}))
 
-constPongrefs : {A : Set₁} → (A → ReferenceTypes)
+constPongrefs : {A : Set₁} → (A → TypingContext)
 constPongrefs _ = PongRefs
 
 pongMainActor : (A : Set₁) → Set₂

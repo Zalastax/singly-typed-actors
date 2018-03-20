@@ -90,8 +90,8 @@ add-selected-references Γ m = add-references Γ (SelectedMessage.msg m)
 infixl 1 _>>=_
 
 data ActorM (IS : InboxShape) : (A : Set₁) →
-                (pre : ReferenceTypes) →
-                (post : A → ReferenceTypes) →
+                (pre : TypingContext) →
+                (post : A → TypingContext) →
                 Set₂ where
     Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
     _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →

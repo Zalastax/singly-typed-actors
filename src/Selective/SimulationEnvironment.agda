@@ -88,9 +88,9 @@ record Actor : Set₂ where
     -- The references are used by the runtime to know which inbox corresponds to
     -- which shape, letting us know which inbox to update when a message is sent.
     references  : List NamedInbox
-    pre         : ReferenceTypes
+    pre         : TypingContext
     pre-eq-refs : (map NamedInbox.shape references) ≡ pre
-    post        : A → ReferenceTypes
+    post        : A → TypingContext
     actor-m     : ActorM inbox-shape A pre post
     name        : Name
 
