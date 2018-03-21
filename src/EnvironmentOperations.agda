@@ -18,6 +18,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; co
 open import Relation.Nullary using (Dec ; yes ; no)
 
 open import Level using (Lift ; lift)
+open import Size
 
 open Actor
 open ValidActor
@@ -26,7 +27,7 @@ open NamedInbox
 
 -- We can create a new Actor from an ActorM if we know its name.
 -- This is used when spawning an actor.
-new-actor : ∀ {IS A post} → ActorM IS A [] post → Name → Actor
+new-actor : ∀ {IS A post} → ActorM ∞ IS A [] post → Name → Actor
 new-actor {IS} {A} {post} m name = record
                                         { inbox-shape = IS
                                         ; A = A
@@ -41,7 +42,7 @@ new-actor {IS} {A} {post} m name = record
 -- An actor can be lifted to run sub-programs that need less references
 lift-actor : (actor : Actor) → {pre : TypingContext} → (references : Store) →
               (pre-eq-refs : (map shape references) ≡ pre) →
-              ActorM (inbox-shape actor) (A actor) pre (post actor) → Actor
+              ActorM ∞ (inbox-shape actor) (A actor) pre (post actor) → Actor
 lift-actor actor {pre} references pre-eq-refs m = record
                                               { inbox-shape = inbox-shape actor
                                               ; A = A actor
@@ -55,7 +56,7 @@ lift-actor actor {pre} references pre-eq-refs m = record
 
 -- Replace the monadic part of an actor
 -- Many of the bind-operations don't change anything except what the next step should be.
-replace-actorM : (actor : Actor) → ActorM (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
+replace-actorM : (actor : Actor) → ActorM ∞ (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
 replace-actorM actor m = record
                            { inbox-shape = inbox-shape actor
                            ; A = A actor
@@ -70,7 +71,7 @@ replace-actorM actor m = record
 -- Add one reference to an actor.
 -- Used when receiving a reference, spawn, or self.
 -- The precondition and references are equal via the congruence relation on consing the shape of the reference.
-add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
+add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
 add-reference actor nm m = record
                              { inbox-shape = inbox-shape actor
                              ; A = A actor
@@ -82,7 +83,7 @@ add-reference actor nm m = record
                              ; name = name actor
                              }
 
-add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
+add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
 add-references-to-actor actor nms m = record
                                         { inbox-shape = inbox-shape actor
                                         ; A = A actor
@@ -94,7 +95,7 @@ add-references-to-actor actor nms m = record
                                         ; name = name actor
                                         }
 
-add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} → map shape nms ++ pre actor ≡ add-references (pre actor) x → ActorM (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) → Actor
+add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} → map shape nms ++ pre actor ≡ add-references (pre actor) x → ActorM ∞ (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) → Actor
 add-references-rewrite actor nms {x} p m = record
                              { inbox-shape = inbox-shape actor
                              ; A = A actor
@@ -262,7 +263,7 @@ messages-valid-suc {store} {inb} {n} {x} frsh vi = do-the-work n x (Inbox.inbox-
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
-add-top : ∀ {IS A post} → ActorM IS A [] post → Env → Env
+add-top : ∀ {IS A post} → ActorM ∞ IS A [] post → Env → Env
 add-top {IS} {A} {post} actor-m env = record
                                  { acts = record
                                             { inbox-shape = IS
