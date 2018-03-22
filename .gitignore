@@ -2,8 +2,9 @@
 *.agdai
 .*.agda.vim
 
-# Ignore Emacs backup files
+# Ignore Emacs files
 *~
+.#*
 
 # Ignore Agda-generated files
 html/
