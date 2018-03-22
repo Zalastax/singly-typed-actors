@@ -110,16 +110,13 @@ named-field-content (ReferenceType Fw) = Name
 data NamedMessage (To : InboxShape): Set₁ where
   NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
 
--- A list of messages, wrapped up with the shape of the messages
--- Each inbox is given a name, matching those for actors
-record Inbox : Set₂ where
-  field
-    inbox-shape    : InboxShape
-    inbox-messages : List (NamedMessage inbox-shape)
-    name           : Name
+Inbox : InboxShape → Set₁
+Inbox is = List (NamedMessage is)
 
--- TODO: Naming of Store and Inboxes?
-Inboxes = List Inbox
+data Inboxes : (store : Store) → Set₁ where
+  [] : Inboxes []
+  _∷_ : ∀ {store name inbox-shape} → List (NamedMessage inbox-shape) →
+    (inboxes : Inboxes store) → Inboxes (inbox# name [ inbox-shape ] ∷ store)
 
 -- Property that there exists an inbox of the right shape in the list of inboxes
 -- This is used both for proving that every actor has an inbox,
@@ -158,17 +155,26 @@ message-valid : ∀ {IS} → Store → NamedMessage IS → Set₁
 message-valid store (NamedM x x₁) = all-fields-have-pointer store x₁
 
 -- An inbox is valid in a store if all its messages are valid
-all-messages-valid : Store → Inbox → Set₁
-all-messages-valid store inb = All (message-valid store) (Inbox.inbox-messages inb)
+all-messages-valid : ∀ {IS} → Store → Inbox IS → Set₁
+all-messages-valid store = All (message-valid store)
+
+infixr 5 _∷_
+
+data InboxesValid (store : Store) : ∀ {store'} → Inboxes store' → Set₁ where
+  [] : InboxesValid store []
+  _∷_ : ∀ {store' name IS} {inboxes : Inboxes store'} {inbox : Inbox IS} →
+    all-messages-valid store inbox →
+    InboxesValid store inboxes →
+    InboxesValid store {inbox# name [ IS ] ∷ store'} (inbox ∷ inboxes)
 
 -- A store entry is just an inbox without its messages.
 -- We make this distinction so that updating the messages of a store
 -- does not invalidate every pointer into the store.
-inbox-to-store-entry : Inbox → NamedInbox
-inbox-to-store-entry inb = inbox# (Inbox.name inb) [ Inbox.inbox-shape inb ]
+-- inbox-to-store-entry : Inbox → NamedInbox
+-- inbox-to-store-entry inb = inbox# (Inbox.name inb) [ Inbox.inbox-shape inb ]
 
-inboxes-to-store : Inboxes → Store
-inboxes-to-store = map inbox-to-store-entry
+-- inboxes-to-store : Inboxes → Store
+-- inboxes-to-store = map inbox-to-store-entry
 
 -- A name is unused in a store if every inbox has a name that is < than the name
 NameFresh : Store → ℕ → Set₁
@@ -186,14 +192,13 @@ record Env : Set₂ where
     -- actors that won't succed in taking a step, and we get a clear step-condition when there are no
     -- non-blocked actors left.
     blocked : List Actor
-    env-inboxes : Inboxes
     store : Store
-    inbs=store : store ≡ inboxes-to-store env-inboxes
+    env-inboxes : Inboxes store
     -- The proofs that an actor and a blocked actor is valid is actually the same proof,
     -- but kept in a separate list.
     actors-valid : All (ValidActor store) acts
     blocked-valid : All (ValidActor store) blocked
-    messages-valid : All (all-messages-valid store) env-inboxes
+    messages-valid : InboxesValid store env-inboxes
     -- In each environment we keep track of the next fresh name,
     -- and a proof that the name is not already used in the store.
     fresh-name : Name
@@ -206,7 +211,6 @@ empty-env = record
              ; blocked = []
              ; env-inboxes = []
              ; store = []
-             ; inbs=store = refl
              ; fresh-name = 0
              ; actors-valid = []
              ; blocked-valid = []
@@ -229,9 +233,8 @@ singleton-env {IS} {A} {post} actor = record
                                   ; name = 0
                                   } ∷ []
                        ; blocked = []
-                       ; env-inboxes = record { inbox-shape = IS ; inbox-messages = [] ; name = 0 } ∷ []
+                       ; env-inboxes = [] ∷ []
                        ; store = inbox# 0 [ IS ] ∷ []
-                       ; inbs=store = refl
                        ; fresh-name = 1
                        ; actors-valid = (record { actor-has-inbox = zero ; references-have-pointer = [] }) ∷ []
                        ; blocked-valid = []

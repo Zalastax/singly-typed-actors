@@ -50,16 +50,16 @@ log-trace : Trace → IO.IO ⊤
 log-trace trace = IO.putStrLn (show-trace trace ++ ".")
 
 -- Output the number of inboxes in the environment.
-log-inbox-count : Inboxes → IO.IO ⊤
-log-inbox-count inboxes = IO.putStrLn ("There are " ++ (show (Data.List.length inboxes)) ++ " inboxes.")
+log-inbox-count : ∀ {store} → Inboxes store → IO.IO ⊤
+log-inbox-count {store} inboxes = IO.putStrLn ("There are " ++ (show (Data.List.length store)) ++ " inboxes.")
 
 -- Output the number of messages in an inbox
-log-message-counts : Inboxes → IO.IO ⊤
+log-message-counts : ∀ {store} → Inboxes store → IO.IO ⊤
 log-message-counts [] = IO.return _
-log-message-counts (x ∷ xs) = ♯ IO.putStrLn ("Inbox #" ++ show (Inbox.name x) ++ " has " ++ (show (Data.List.length (Inbox.inbox-messages x))) ++ " messages.") IO.>> ♯ log-message-counts xs
+log-message-counts {inbox# name [ _ ] ∷ store} (x ∷ xs) = ♯ IO.putStrLn ("Inbox #" ++ show name ++ " has " ++ (show (Data.List.length x)) ++ " messages.") IO.>> ♯ log-message-counts xs
 
 -- Output the nunmber of inboxes and how many messages are in each inbox.
-log-inboxes : Inboxes → IO.IO ⊤
+log-inboxes : ∀ {store} → Inboxes store → IO.IO ⊤
 log-inboxes inboxes = ♯ log-inbox-count inboxes IO.>> ♯ log-message-counts inboxes
 
 -- Output how many actors are currently running and how many actors are blocked.

@@ -119,16 +119,12 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     newStoreEntry = inbox# fresh-name env [ NewIS ]
     newStore : Store
     newStore = newStoreEntry ∷ store env
-    newInb : Inbox
-    newInb = record { inbox-shape = NewIS ; inbox-messages = [] ; name = fresh-name env }
     newAct : Actor
     newAct = new-actor bm (fresh-name env)
     newActValid : ValidActor newStore newAct
     newActValid = record { actor-has-inbox = zero ; references-have-pointer = [] }
     newIsFresh : NameFresh newStore (suc (fresh-name env))
     newIsFresh = s≤s (≤-reflexive refl) ∷ ∀map ≤-step (name-is-fresh env)
-    newInbs=newStore : store env ≡ inboxes-to-store (env-inboxes env) → newStore ≡ inboxes-to-store (newInb ∷ env-inboxes env)
-    newInbs=newStore refl = refl
     bindAct : Actor
     bindAct = add-reference actor newStoreEntry (♭ (f _))
     bindActValid : ValidActor newStore bindAct
@@ -143,15 +139,18 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     env' = record
              { acts = newAct ∷ bindAct ∷ rest
              ; blocked = blocked env
-             ; env-inboxes = newInb ∷ env-inboxes env
+             ; env-inboxes = [] ∷ env-inboxes env
              ; store = newStore
-             ; inbs=store = newInbs=newStore (inbs=store env)
              ; fresh-name = suc (fresh-name env)
              ; actors-valid = newActValid ∷ bindActValid ∷ ∀map (valid-actor-suc (name-is-fresh env)) restValid
              ; blocked-valid = ∀map (valid-actor-suc (name-is-fresh env)) (blocked-valid env)
-             ; messages-valid = [] ∷ ∀map (λ {inb} mv → messages-valid-suc {_} {inb} (name-is-fresh env) mv) (messages-valid env)
+             ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (name-is-fresh env)
              ; name-is-fresh = newIsFresh
              }
+         where
+           map-suc : (store : Store) → {store' : Store} → {inbs : Inboxes store'} → InboxesValid store inbs → ∀ {n} → (NameFresh store n) → InboxesValid (inbox# n [ NewIS ] ∷ store) inbs
+           map-suc store [] frsh = []
+           map-suc store (x ∷ valid) frsh = (messages-valid-suc frsh x) ∷ (map-suc store valid frsh)
 -- ===== Bind send reference =====
 -- Spawns a reference message and continues with (f tt).
 --
@@ -204,9 +203,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
   where
     actorsInbox : GetInbox (store env) (inbox-shape actor)
     actorsInbox = get-inbox env (actor-has-inbox valid)
-    actorsPointer : (inboxes-to-store (env-inboxes env) ≡ store env) → (name actor) ↦ (inbox-shape actor) ∈e inboxes-to-store (env-inboxes env)
-    actorsPointer refl = actor-has-inbox valid
-    inboxesAfter = update-inboxes (store env) (env-inboxes env) (messages-valid env) (actorsPointer (sym (inbs=store env))) remove-message
+    inboxesAfter = update-inboxes (store env) (env-inboxes env) (messages-valid env) (actor-has-inbox valid) remove-message
     receiveKind : List (NamedMessage (inbox-shape actor)) → ReceiveKind
     receiveKind [] = Nothing
     receiveKind (NamedM _ ps ∷ xs) = Value (reference-names ps)
@@ -219,7 +216,6 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                                                    ; blocked = blocked env
                                                                    ; env-inboxes = updated-inboxes inboxesAfter
                                                                    ; store = store env
-                                                                   ; inbs=store = trans (inbs=store env) (same-store inboxesAfter)
                                                                    ; actors-valid = record {
                                                                      actor-has-inbox = actor-has-inbox valid
                                                                      ; references-have-pointer = valid++ nm nmv (references actor) (references-have-pointer valid) } ∷ restValid
