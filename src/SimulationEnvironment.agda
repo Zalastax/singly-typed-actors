@@ -142,17 +142,22 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
     actor-has-inbox : has-inbox store actor
     references-have-pointer : all-references-have-a-pointer store actor
 
-all-fields-have-pointer : ∀ {MT} → Store → All named-field-content MT → Set₁
-all-fields-have-pointer st [] = Lift ⊤
-all-fields-have-pointer st (_∷_ {ValueType _} _ xs) = ⊤ × all-fields-have-pointer st xs
-all-fields-have-pointer st (_∷_ {ReferenceType Fw} name xs) = (name comp↦ Fw ∈ st) × all-fields-have-pointer st xs
+data FieldsHavePointer (store : Store) : ∀ {MT} → All named-field-content MT → Set₁ where
+  [] : FieldsHavePointer store []
+  v+_ : ∀ {MT A} {v : A} {nfc : All named-field-content MT} →
+    FieldsHavePointer store nfc →
+    FieldsHavePointer store {ValueType A ∷ MT} (v ∷ nfc)
+  _∷r_ : ∀ {name Fw MT} {nfc : All named-field-content MT} →
+    name comp↦ Fw ∈ store →
+    FieldsHavePointer store nfc →
+    FieldsHavePointer store {ReferenceType Fw ∷ MT} (name ∷ nfc)
 
 -- To limit references to only those that are valid for the current store,
 -- we have to prove that name in the message points to an inbox of the same
 -- type as the reference.
 -- Value messages are not context sensitive.
 message-valid : ∀ {IS} → Store → NamedMessage IS → Set₁
-message-valid store (NamedM x x₁) = all-fields-have-pointer store x₁
+message-valid store (NamedM x x₁) = FieldsHavePointer store x₁
 
 -- An inbox is valid in a store if all its messages are valid
 all-messages-valid : ∀ {IS} → Store → Inbox IS → Set₁
@@ -166,15 +171,6 @@ data InboxesValid (store : Store) : ∀ {store'} → Inboxes store' → Set₁ w
     all-messages-valid store inbox →
     InboxesValid store inboxes →
     InboxesValid store {inbox# name [ IS ] ∷ store'} (inbox ∷ inboxes)
-
--- A store entry is just an inbox without its messages.
--- We make this distinction so that updating the messages of a store
--- does not invalidate every pointer into the store.
--- inbox-to-store-entry : Inbox → NamedInbox
--- inbox-to-store-entry inb = inbox# (Inbox.name inb) [ Inbox.inbox-shape inb ]
-
--- inboxes-to-store : Inboxes → Store
--- inboxes-to-store = map inbox-to-store-entry
 
 -- A name is unused in a store if every inbox has a name that is < than the name
 NameFresh : Store → ℕ → Set₁

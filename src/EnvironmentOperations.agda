@@ -232,14 +232,14 @@ messages-valid-suc {store} {IS} {n} {x} frsh [] = []
 messages-valid-suc {store} {IS} {n} {x} {nx ∷ _} frsh (px ∷ vi) = message-valid-suc nx px ∷ (messages-valid-suc frsh vi)
   where
     open _comp↦_∈_
-    fields-valid-suc : ∀ {MT} → (fields : All named-field-content MT) →
-      all-fields-have-pointer store fields →
-      all-fields-have-pointer (inbox# n [ x ] ∷ store) fields
-    fields-valid-suc [] _ = _
-    fields-valid-suc {ValueType x ∷ _} (px ∷ fields) (_ , valid) = _ , (fields-valid-suc fields valid)
-    fields-valid-suc {ReferenceType x ∷ _} (px ∷ fields) (p , valid) = suc-p (suc-helper (actual-has-pointer p) frsh) p , (fields-valid-suc fields valid)
+    fields-valid-suc : ∀ {MT} {fields : All named-field-content MT} →
+      FieldsHavePointer store fields →
+      FieldsHavePointer (inbox# n [ x ] ∷ store) fields
+    fields-valid-suc [] = []
+    fields-valid-suc (v+ valid) = v+ fields-valid-suc valid
+    fields-valid-suc (x ∷r valid) = (suc-p (suc-helper (actual-has-pointer x) frsh) x) ∷r (fields-valid-suc valid)
     message-valid-suc : (nx : NamedMessage IS) → message-valid store nx → message-valid (inbox# n [ x ] ∷ store) nx
-    message-valid-suc (NamedM x₁ x₂) px = fields-valid-suc x₂ px
+    message-valid-suc (NamedM x₁ x₂) px = fields-valid-suc px
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
@@ -452,7 +452,7 @@ unname-field {ValueType x₁} nfc = nfc
 unname-field {ReferenceType x₁} nfc = _
 
 unname-message : ∀ {S} → NamedMessage S → Message S
-unname-message (NamedM x fields) = Msg x (do-the-work fields) -- (∀map unname-field fields)
+unname-message (NamedM x fields) = Msg x (do-the-work fields)
   where
     do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
     do-the-work {[]} nfc = []
@@ -486,19 +486,19 @@ add-references++ msg@(NamedM {MT} x x₁) p w = halp (add-fields++ MT x₁)
     add-fields++ (ValueType x ∷ MT) (px ∷ x₁) = add-fields++ MT x₁
     add-fields++ (ReferenceType x ∷ MT) (px ∷ x₁) = cong (_∷_ x) (add-fields++ MT x₁)
 
-valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ w →
+valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ {w} →
         All (reference-has-pointer store) w →
         All (reference-has-pointer store) (named-inboxes nm ++ w)
-valid++ (NamedM x x₁) v p = valid-fields x₁ v p
+valid++ (NamedM x x₁) v = valid-fields v
   where
     valid-fields : ∀ {MT store} →
-                   (x₁ : All named-field-content MT) →
-                   all-fields-have-pointer store x₁ → ∀ p →
+                   {fields : All named-field-content MT} →
+                   FieldsHavePointer store fields → ∀ {p} →
                    All (reference-has-pointer store) p →
-                   All (reference-has-pointer store) (extract-inboxes x₁ ++ p)
-    valid-fields [] h p ps = ps
-    valid-fields (_∷_ {ValueType x} px x₁) (_ , h) p ps = valid-fields x₁ h p ps
-    valid-fields (_∷_ {ReferenceType x} px x₁) (hj , h) p ps = hj ∷ (valid-fields x₁ h p ps)
+                   All (reference-has-pointer store) (extract-inboxes fields ++ p)
+    valid-fields [] ps = ps
+    valid-fields (v+ fhp) ps = valid-fields fhp ps
+    valid-fields (px ∷r fhp) ps = px ∷ (valid-fields fhp ps)
 
 open _⊢>:_
 
@@ -517,13 +517,15 @@ make-pointer-compatible : ∀ store x refs
                        name w comp↦ x ∈ store
 make-pointer-compatible store x refs px rhp w = [p: actual-has-pointer (reference w) ][handles: compatible-handles store x refs px w ]
 
+open FieldsHavePointer
+
 make-pointers-compatible : ∀ {MT} store pre refs (eq : map shape refs ≡ pre)
                            (fields : All (send-field-content pre) MT)
                            (rhp : All (reference-has-pointer store) refs) →
-                         all-fields-have-pointer store (name-fields pre refs rhp fields eq)
-make-pointers-compatible store pre refs eq [] rhp = _
-make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = _ , (make-pointers-compatible store _ refs refl fields rhp)
-make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = make-pointer-compatible store x refs px rhp foundFw , (make-pointers-compatible store _ refs refl fields rhp)
+                         FieldsHavePointer store (name-fields pre refs rhp fields eq)
+make-pointers-compatible store pre refs eq [] rhp = []
+make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = v+ make-pointers-compatible store _ refs refl fields rhp
+make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = (make-pointer-compatible store x refs px rhp foundFw) ∷r (make-pointers-compatible store _ refs refl fields rhp)
   where
     foundFw : FoundReference store (actual px)
     foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
