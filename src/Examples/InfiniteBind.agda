@@ -11,6 +11,6 @@ open import Data.Unit using (⊤ ; tt)
 Box : InboxShape
 Box = []
 
-binder : ActorM Box ⊤₁ [] (λ _ → [])
-binder = ♯ binder >>= λ _ → ♯ binder
+binder : ∀ {i} → ∞ActorM i Box ⊤₁ [] (λ _ → [])
+binder .force = binder ∞>> binder
 

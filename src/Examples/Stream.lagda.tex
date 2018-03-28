@@ -1,0 +1,40 @@
+\begin{code}
+module Examples.Stream where
+open import Data.Nat
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
+
+\end{code}
+%<*Stream>
+\begin{code}
+record Stream (A : Set) : Set where
+  coinductive
+  field
+    head : A
+    tail : Stream A
+\end{code}
+%</Stream>
+\begin{code}
+open Stream
+\end{code}
+%<*AllNats>
+\begin{code}
+nats : ℕ → Stream ℕ
+nats n .head = n
+nats n .tail = nats (suc n)
+
+all-nats = nats 0
+
+third-tail : (all-nats .tail .tail .tail .head) ≡ 3
+third-tail = refl
+\end{code}
+%</AllNats>
+
+\begin{code}
+{-# NON_TERMINATING #-}
+\end{code}
+%<*NatsAlternative>
+\begin{code}
+nats' : ℕ → Stream ℕ
+nats' n = record { head = n ; tail = nats' (suc n) }
+\end{code}
+%</NatsAlternative>

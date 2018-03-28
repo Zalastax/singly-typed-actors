@@ -2,15 +2,17 @@ module Selective.Runtime where
 open import Selective.Simulate
 open import Selective.SimulationEnvironment
 
-open import Data.Colist using (Colist ; [] ; _∷_)
+open import Colist using (Colist ; ∞Colist ; [] ; _∷_)
 open import Data.List using (List ; _∷_ ; [] ; map ; length)
 open import Data.Nat using (ℕ ; zero ; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String ; _++_)
 open import Data.Unit using (⊤ ; tt)
 
-open import Coinduction using (∞ ; ♯_ ; ♭)
+open import Coinduction using ( ♯_ ; ♭)
+open import Size using (∞)
 import IO
+open ∞Colist
 
 Logger = (ℕ → EnvStep → IO.IO ⊤)
 
@@ -18,11 +20,11 @@ Logger = (ℕ → EnvStep → IO.IO ⊤)
 -- and transforms the steps taken into output to the console.
 -- The output can be configured by prodiving different loggers.
 run-env : Logger → Env → IO.IO ⊤
-run-env logger env = loop 1 (simulate env)
+run-env logger env = loop 1 ((simulate env) .force)
   where
-    loop : ℕ → Colist EnvStep → IO.IO ⊤
+    loop : ℕ → Colist ∞ EnvStep → IO.IO ⊤
     loop n [] = IO.putStrLn ("Done after " ++ (show n) ++ " steps.")
-    loop n (x ∷ xs) = ♯ logger n x IO.>> ♯ loop (suc n) (♭ xs)
+    loop n (x ∷ xs) = ♯ logger n x IO.>> ♯ loop (suc n) (xs .force)
 
 open EnvStep
 open Env
@@ -38,7 +40,7 @@ show-trace (Return name) = show name ++ " returned"
 show-trace (Bind trace) = "Bind [ " ++ show-trace trace ++ " ]"
 show-trace (BindDouble name) = "Bind " ++ (show name)
 show-trace (Spawn spawner spawned) = (show spawner) ++ " spawned " ++ (show spawned)
-show-trace (Send sender receiver references) = (show sender) ++ " sent a reference to " ++ (show receiver) ++ " forwarding [" ++ showNames references ++ "]"
+show-trace (Send sender receiver references) = (show sender) ++ " sent a message to " ++ (show receiver) ++ " forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Nothing) = (show name) ++ " received nothing. It was put in the blocked list"
 show-trace (Receive name (Value references)) = (show name) ++ " received a message forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Dropped) = (show name) ++ " received something, but had no bind. It was dropped"
@@ -53,16 +55,16 @@ log-trace : Trace → IO.IO ⊤
 log-trace trace = IO.putStrLn (show-trace trace ++ ".")
 
 -- Output the number of inboxes in the environment.
-log-inbox-count : Inboxes → IO.IO ⊤
-log-inbox-count inboxes = IO.putStrLn ("There are " ++ (show (Data.List.length inboxes)) ++ " inboxes.")
+log-inbox-count : ∀ {store} → Inboxes store → IO.IO ⊤
+log-inbox-count {store} inboxes = IO.putStrLn ("There are " ++ (show (Data.List.length store)) ++ " inboxes.")
 
 -- Output the number of messages in an inbox
-log-message-counts : Inboxes → IO.IO ⊤
+log-message-counts : ∀ {store} → Inboxes store → IO.IO ⊤
 log-message-counts [] = IO.return _
-log-message-counts (x ∷ xs) = ♯ IO.putStrLn ("Inbox #" ++ show (Inbox.name x) ++ " has " ++ (show (Data.List.length (Inbox.inbox-messages x))) ++ " messages.") IO.>> ♯ log-message-counts xs
+log-message-counts {inbox# name [ _ ] ∷ store} (x ∷ xs) = ♯ IO.putStrLn ("Inbox #" ++ show name ++ " has " ++ (show (Data.List.length x)) ++ " messages.") IO.>> ♯ log-message-counts xs
 
 -- Output the nunmber of inboxes and how many messages are in each inbox.
-log-inboxes : Inboxes → IO.IO ⊤
+log-inboxes : ∀ {store} → Inboxes store → IO.IO ⊤
 log-inboxes inboxes = ♯ log-inbox-count inboxes IO.>> ♯ log-message-counts inboxes
 
 -- Output how many actors are currently running and how many actors are blocked.

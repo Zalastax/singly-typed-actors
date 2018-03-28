@@ -4,6 +4,8 @@ subdirs := src/ src/Examples/ src/Selective/ src/Selective/Examples/
 sources := $(wildcard $(subdirs:%=%*.lagda.tex))
 renamed := $(sources:%.lagda.tex=%.tex)
 moved   := $(renamed:src/%=$(LATEX-OUTPUT-DIR)%)
+out-subdirs := $(subdirs:src/%=$(LATEX-OUTPUT-DIR)%)
+generated   :=  $(wildcard $(out-subdirs:%=%*.tex))
 
 $(moved): $(LATEX-OUTPUT-DIR)%.tex: src/%.lagda.tex
 	stack exec agda -- --latex-dir=$(LATEX-OUTPUT-DIR) --latex $<
@@ -12,4 +14,5 @@ $(moved): $(LATEX-OUTPUT-DIR)%.tex: src/%.lagda.tex
 
 .PHONY: all clean
 all: $(moved)
-clean: rm -rf $(LATEX-OUTPUT-DIR)
+clean:
+	rm $(wildcard $(wildcard $(generated)))

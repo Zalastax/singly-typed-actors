@@ -4,8 +4,8 @@ open import Membership using (_∈_ ; _⊆_ ; All-⊆ ; translate-⊆ ; ⊆-refl
 open import ActorMonad public
 open import SimulationEnvironment
 open import EnvironmentOperations
+open import Colist
 
-open import Data.Colist using (Colist ; [] ; _∷_)
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_)
 open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺)
@@ -17,7 +17,7 @@ open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
 
 open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
-open import Coinduction using (∞ ; ♯_ ; ♭)
+open import Size using (∞)
 
 data ReceiveKind : Set where
   Nothing : ReceiveKind
@@ -41,7 +41,7 @@ record EnvStep : Set₂ where
     trace : Trace
 
 private
-  keep-simulating : Trace → Env → Colist EnvStep
+  keep-simulating : Trace → Env → ∞Colist ∞ EnvStep
 
 open Actor
 open ValidActor
@@ -52,6 +52,7 @@ open UpdatedInboxes
 open ValidMessageList
 open NamedInbox
 open _comp↦_∈_
+open ∞Colist
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.
@@ -62,10 +63,10 @@ open _comp↦_∈_
 -- The behaviour of one step depends on whether there is a step coming after or if this is the
 -- last step for the actor, so for every constructor we need to handle the case of when the
 -- constructor is used in a bind or separately.
-simulate : Env → Colist EnvStep
+simulate : Env → ∞Colist ∞ EnvStep
 simulate env with (acts env) | (actors-valid env)
 -- ===== OUT OF ACTORS =====
-simulate env | [] | _ = []
+simulate env | [] | _ = delay []
 simulate env | actor ∷ rest | _ with (actor-m actor)
 -- ===== Return =====
 -- If an actor returns a value but there is nothing that follows,
@@ -73,17 +74,17 @@ simulate env | actor ∷ rest | _ with (actor-m actor)
 simulate env | actor ∷ rest | _ |
   Return val = keep-simulating (Return (name actor)) (drop-top-actor env)
 -- ===== Bind =====
-simulate env | actor ∷ rest | _ | m >>= f with (♭ m)
+simulate env | actor ∷ rest | _ | m ∞>>= f with (m .force)
 -- ===== Bind Value =====
 -- return v >>= f ≡ f v, via the left identity monad law
 -- We keep simulating, with the monadic part of the actor replaced by the value of f applied to v.
 -- Recall that the precondition of a return is the same as the postcondition,
 -- so the available references does not change.
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Return val = keep-simulating (Bind (Return (name actor))) env'
   where
     bindAct : Actor
-    bindAct = replace-actorM actor (♭ (f val))
+    bindAct = replace-actorM actor ((f val) .force)
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
 -- ===== Bind Bind =====
@@ -92,11 +93,11 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- it can be run just one step.
 -- The simulation will keep shifting parantheses until it eventually reaches
 -- a part that is not a bind inside a bind.
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= g |
-  mm >>= f = keep-simulating (Bind (BindDouble (name actor))) env'
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= g |
+  mm ∞>>= f = keep-simulating (Bind (BindDouble (name actor))) env'
   where
     bindAct : Actor
-    bindAct = replace-actorM actor (mm >>= λ x → ♯ (f x >>= g))
+    bindAct = replace-actorM actor (mm ∞>>= λ x → f x >>= g)
     env' : Env
     env' = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
 -- ===== Bind Spawn =====
@@ -112,7 +113,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= g |
 --
 -- In conclusion, the spawned actor is first added to the top of the round-robin queue
 -- and then moved to the back.
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Spawn {NewIS} {B} {_} {postN} bm = keep-simulating (Spawn (name actor) (fresh-name env)) (top-actor-to-back env')
   where
     newStoreEntry : NamedInbox
@@ -126,7 +127,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
     newIsFresh : NameFresh newStore (suc (fresh-name env))
     newIsFresh = s≤s (≤-reflexive refl) ∷ ∀map ≤-step (name-is-fresh env)
     bindAct : Actor
-    bindAct = add-reference actor newStoreEntry (♭ (f _))
+    bindAct = add-reference actor newStoreEntry ((f _) .force)
     bindActValid : ValidActor newStore bindAct
     bindActValid = record {
       actor-has-inbox = suc {pr =
@@ -170,14 +171,14 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- Sending a message to an actor that is blocked,
 -- unblocks it and moves it to the actor queue.
 -- The unblocked actor is put in the back of the round-robin queue.
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Send {ToIS = ToIS} canSendTo (SendM p fields) = keep-simulating (Bind (Send (name actor) (name foundTo) (reference-names namedFields))) withUnblocked
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference-act valid canSendTo
     namedFields = name-fields-act (store env) actor fields valid
     bindAct : Actor
-    bindAct = replace-actorM actor (♭ (f _))
+    bindAct = replace-actorM actor ((f _) .force)
     withM : Env
     withM = replace-actors env (bindAct ∷ rest) (rewrap-valid-actor valid refl refl refl ∷ restValid)
     withUpdatedInbox : Env
@@ -198,7 +199,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- * If the next message is a value, just continue with (f message)
 -- * If the next message is a reference,
 --   take the proof that the message is valid and use that to prove that the added reference is valid.
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Receive = keep-simulating (Bind (Receive (name actor) (receiveKind (GetInbox.messages actorsInbox)))) (env' actorsInbox)
   where
     actorsInbox : GetInbox (store env) (inbox-shape actor)
@@ -212,7 +213,7 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
                                                 rest restValid
                                                 (actor ∷ blocked env) (valid ∷ blocked-valid env)
     env' record { messages = (nm ∷ messages) ; valid = nmv ∷ vmsg } = record
-                                                                   { acts = add-references-rewrite actor (named-inboxes nm) {unname-message nm} (add-references++ nm nmv (pre actor) ) (♭ (f (unname-message nm))) ∷ rest
+                                                                   { acts = add-references-rewrite actor (named-inboxes nm) {unname-message nm} (add-references++ nm nmv (pre actor) ) ((f (unname-message nm) .force)) ∷ rest
                                                                    ; blocked = blocked env
                                                                    ; env-inboxes = updated-inboxes inboxesAfter
                                                                    ; store = store env
@@ -227,16 +228,16 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- ===== Bind lift =====
 -- To bind a lift we just perform the lifting of the actor and rewrap it in the same bind, like so:
 -- ((Lift x) >>= f) ⇒ liftedX >>= f
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Strengthen {ys} {xs} inc = keep-simulating (Bind (Strengthen (name actor))) env'
   where
     liftedRefs = lift-references inc (references actor) (pre-eq-refs actor)
-    strengthenedM : ActorM (inbox-shape actor) ⊤₁ (map shape (contained liftedRefs)) (λ _ → ys)
-    strengthenedM rewrite (sym (contained-eq-inboxes liftedRefs)) = Return _
+    strengthenedM : ∞ActorM ∞ (inbox-shape actor) ⊤₁ (map shape (contained liftedRefs)) (λ _ → ys)
+    strengthenedM rewrite (sym (contained-eq-inboxes liftedRefs)) = return _
     -- liftedBx : ActorM (inbox-shape actor) B (map shape (contained liftedRefs)) postX
     -- liftedBx rewrite (sym (contained-eq-inboxes liftedRefs)) = bx
     bindAct : Actor
-    bindAct = lift-actor actor (contained liftedRefs) refl (♯ strengthenedM >>= f)
+    bindAct = lift-actor actor (contained liftedRefs) refl (strengthenedM ∞>>= f)
     bindActValid : ValidActor (store env) bindAct
     bindActValid = record { actor-has-inbox = actor-has-inbox valid
                           ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid) }
@@ -246,11 +247,11 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
 -- To bind 'self' we just need to add the actors name and type to its references / precondition.
 -- We get the proof that the added reference is valid via (actor-has-inbox valid).
 -- countinues with (f tt)
-simulate env | actor@(_) ∷ rest | valid ∷ restValid | m >>= f |
+simulate env | actor@(_) ∷ rest | valid ∷ restValid | m ∞>>= f |
   Self = keep-simulating (Bind (Self (name actor))) env'
   where
     bindAct : Actor
-    bindAct = add-reference actor (inbox# name actor [ inbox-shape actor ]) (♭ (f _))
+    bindAct = add-reference actor (inbox# name actor [ inbox-shape actor ]) ((f _) .force)
     bindActValid : ValidActor (store env) bindAct
     bindActValid = record { actor-has-inbox = actor-has-inbox valid
                           ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: ⊆-refl ] ∷ references-have-pointer valid }
@@ -300,4 +301,4 @@ simulate env | actor@(_) ∷ rest | valid ∷ restValid |
   Self = keep-simulating (Self (name actor)) (drop-top-actor env)
 
 
-keep-simulating trace env = record { env = env ; trace = trace } ∷ ♯ simulate (top-actor-to-back env)
+keep-simulating trace env .force = record { env = env ; trace = trace } ∷ simulate (top-actor-to-back env)

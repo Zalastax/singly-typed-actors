@@ -5,7 +5,7 @@ open import Data.List using (List ; _∷_ ; [] ; _++_)
 open import Data.List.All using (All ; _∷_ ; [])
 open import Data.Bool using (Bool ; if_then_else_ ; false ; true)
 open import Data.Nat using (ℕ ; zero ; suc ; _+_)
-open import Coinduction
+open import Size
 open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
@@ -26,15 +26,15 @@ call-select {IS} sub which = filter
     filter : MessageFilter IS
     filter (Msg x x₁) = call-select-unwrap x (translate-⊆  sub which)
 
-call : ∀ {Γ MtTo MtIn} {To IS IS' : InboxShape} → (Γ ⊢ To) →
+call : ∀ {Γ MtTo MtIn i} {To IS IS' : InboxShape} → (Γ ⊢ To) →
        ((ReferenceType IS' ∷ MtTo) ∈ To) → All (send-field-content Γ) MtTo →
        (ISsubs : IS' <: IS) → (whichIn : MtIn ∈ IS') →
-       (ActorM IS (SelectedMessage (call-select ISsubs whichIn)) Γ) (add-selected-references Γ)
+       ∞ActorM i IS (SelectedMessage (call-select ISsubs whichIn)) Γ (add-selected-references Γ)
 call {Γ} {IS = IS} var toFi vals sub whichIn =
-  ♯ Self >>= λ _ →
-  ♯ ((S var ![t: toFi ] (([ Z ]>: sub) ∷ translate-fields vals)) >>= λ _ →
-  ♯ ( strengthen (⊆-suc ⊆-refl) >>= λ _ →
-  ♯ SelectiveReceive (call-select sub whichIn)))
+  self >>
+  ((S var ![t: toFi ] (([ Z ]>: sub) ∷ (translate-fields vals))) >>
+  (strengthen (⊆-suc ⊆-refl) >>
+  selective-receive (call-select sub whichIn)))
   where
     translate-fields : ∀ {MT} → All (send-field-content Γ) MT → All (send-field-content (IS ∷ Γ)) MT
     translate-fields [] = []
@@ -44,24 +44,24 @@ call {Γ} {IS = IS} var toFi vals sub whichIn =
 Calculator : InboxShape
 Calculator = (ReferenceType ((ValueType ℕ ∷ []) ∷ []) ∷ ValueType ℕ ∷ ValueType ℕ ∷ []) ∷ []
 
-calculatorActor : ActorM Calculator (Lift ⊤) [] (λ _ → [])
-calculatorActor = loop >>= return₁
-  where
-    loop : ∞ (ActorM Calculator (Lift ⊤) [] (λ _ → []))
-    loop = ♯ (receive >>= λ {
-      (Msg Z (_ ∷ n ∷ m ∷ [])) → ♯ ((Z ![t: Z ] ((lift (n + m)) ∷ [])) >>= λ _ → ♯ (strengthen [] >>= λ _ → loop))
-      ; (Msg (S ()) x₁)
-      })
+calculatorActor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
+calculatorActor .force = receive ∞>>= λ {
+  (Msg Z (_ ∷ n ∷ m ∷ [])) .force → (Z ![t: Z ] ((lift (n + m)) ∷ [])) ∞>>
+    (strengthen [] >>
+    calculatorActor)
+  ; (Msg (S ()) _)
+  }
 
 TestBox : InboxShape
 TestBox = ((ValueType ℕ ∷ [])) ∷ [] ∷ []
 
-calltestActor : ActorM TestBox (Lift ℕ) [] (λ _ → [])
-calltestActor = spawn calculatorActor >>= (λ _ →
-            ♯ (
-              (♯ (call Z Z ((lift 10) ∷ ((lift 32) ∷ []))) (Z ∷ []) Z) >>= λ x → ♯ ( strengthen [] >>= λ _ → (return-result x))))
+calltestActor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+calltestActor .force = spawn∞ calculatorActor ∞>>
+                       (call Z Z ((lift 10) ∷ ((lift 32) ∷ [])) (Z ∷ []) Z >>= λ x →
+                       strengthen [] >>
+                       return-result x)
   where
-    return-result : SelectedMessage {TestBox} (call-select (Z ∷ []) Z) → ∞ (ActorM TestBox (Lift ℕ) [] (λ _ → []))
+    return-result : SelectedMessage {TestBox} (call-select (Z ∷ []) Z) → ∀ {i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
     return-result record { msg = (Msg Z (px ∷ x₁)) } = return px
     return-result record { msg = (Msg (S x) x₁) ; msg-ok = () }
 

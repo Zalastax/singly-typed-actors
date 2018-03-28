@@ -6,8 +6,8 @@ open import Data.List using (List ; [] ; _∷_ ; _++_)
 open import Data.List.All using (All ; [] ; _∷_)
 open import Data.Unit using (⊤ ; tt)
 
-open import Coinduction using (∞ ; ♯_ ; ♭)
 open import Level using (Lift ; lift ; suc ; zero)
+open import Size using (Size ; Size<_ ; ↑_)
 \end{code}
 
 An Actor is indexed by the shape of its inbox.
@@ -177,13 +177,13 @@ and its corresponding binder.
 Following are some examples comparing a λ-calculus with names
 and a λ-calculus using de Bruijn indices.
 
-\begin{table}[]
+\begin{table}[h]
 \centering
 \begin{tabular}{ll}
 Named                                 & de Bruijn                 \\
 $ λ\ x → x $                          & $ λ\ 1 $                  \\
 $ λ\ x → λ\ y → x $                   & $ λ\ λ\ 2 $               \\
-$ λ\ x → λ\ y → λ\ z → x\ z\ (y\ z) $ & $ λ\ λ\ λ\ 3\ 1\ (2\ 1) $ \\         
+$ λ\ x → λ\ y → λ\ z → x\ z\ (y\ z) $ & $ λ\ λ\ λ\ 3\ 1\ (2\ 1) $ \\
 \end{tabular}
 \end{table}
 
@@ -255,7 +255,10 @@ send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
-  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
+  SendM : {MT : MessageType} →
+          MT ∈ To →
+          All (send-field-content Γ) MT →
+          SendMessage To Γ
 \end{code}
 
 Somewhat surprisingly,
@@ -275,7 +278,10 @@ receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
 
 data Message (To : InboxShape) : Set₁ where
-  Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
+  Msg : {MT : MessageType} →
+        MT ∈ To →
+        All receive-field-content MT →
+        Message To
 
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
@@ -287,7 +293,7 @@ add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
 \end{code}
 %</Messages>
 \begin{code}
-infixl 1 _>>=_
+infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 \end{code}
 %<*LiftTop>
 \AgdaTarget{⊤₁}
@@ -322,10 +328,20 @@ capturing preconditions and postconditions in the type.
 
 \AgdaTarget{ActorM}
 \begin{code}
-data ActorM (IS : InboxShape) : (A : Set₁) →
+data ActorM (i : Size) (IS : InboxShape) : (A : Set₁) →
               (pre : TypingContext) →
               (post : A → TypingContext) →
-              Set₂ where
+              Set₂
+
+record ∞ActorM (i : Size) (IS : InboxShape) (A : Set₁)
+               (pre : TypingContext)
+               (post : A → TypingContext) :
+               Set₂ where
+  coinductive
+  constructor delay_
+  field force : ∀ {j : Size< i} → ActorM j IS A pre post
+
+data ActorM (i : Size) (IS : InboxShape) where
 \end{code}
 %</ActorMonad>
 %<*ActorMonadBindReturn>
@@ -344,10 +360,10 @@ that wraps \AgdaRef[ActorMonad]{Return} in a thunk.
 
 \AgdaTarget{Return}
 \begin{code}
-  Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
-  _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →
-    (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
-    ActorM IS B pre post
+  Return : ∀ {A post} → (val : A) → ActorM i IS A (post val) post
+  _∞>>=_ : ∀ {A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
+    (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+    ActorM i IS B pre post
 \end{code}
 %</ActorMonadBindReturn>
 %<*ActorMonadSpawn>
@@ -359,13 +375,13 @@ The spawned actor starts with both an empty inbox and an empty variable context.
 \AgdaTarget{Spawn}
 \begin{code}
   Spawn : {NewIS : InboxShape} → {A : Set₁} → ∀ {pre postN} →
-    ActorM NewIS A [] postN →
-    ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre
+    ActorM i NewIS A [] postN →
+    ActorM i IS ⊤₁ pre λ _ → NewIS ∷ pre
 \end{code}
 %</ActorMonadSpawn>
 %<*ActorMonadSend>
 An actor can send messages to any actor it has a reference to.
-It is not explicit in the monad what happens to a sent message, but we will see in (SECTION) 
+It is not explicit in the monad what happens to a sent message, but we will see in (SECTION)
 that evaluating Send will append the message to the actor being referenced.
 The reference variable might be a subtype to the underlying actor it references,
 but this fact is completely opaque to the \AgdaRef[ActorMonad]{Send} construct.
@@ -377,7 +393,7 @@ which is captured in the postcondition being the same as the precondition.
   Send : ∀ {pre} → {ToIS : InboxShape} →
     (canSendTo : pre ⊢ ToIS) →
     (msg : SendMessage ToIS pre) →
-    ActorM IS ⊤₁ pre (λ _ → pre)
+    ActorM i IS ⊤₁ pre (λ _ → pre)
 \end{code}
 %</ActorMonadSend>
 %<*ActorMonadReceive>
@@ -392,7 +408,7 @@ run-time behaviour, so a model where references are handled differently could al
 actors to be implemented as non-parameterized monads.
 \AgdaTarget{Receive}
 \begin{code}
-  Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
+  Receive : ∀ {pre} → ActorM i IS (Message IS) pre (add-references pre)
 \end{code}
 %</ActorMonadReceive>
 %<*ActorMonadSelf>
@@ -402,7 +418,7 @@ to themselves for the corresponding actor to reply to.
 In \AgdaRef[ActorMonad]{ActorM}, this need is fulfilled by the \AgdaRef[ActorMonad]{Self} construct,
 which adds a reference to the actor itself to the variable context.
 \begin{code}
-  Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
+  Self : ∀ {pre} → ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
 \end{code}
 %</ActorMonadSelf>
 %<*ActorMonadStrengthen>
@@ -423,7 +439,7 @@ making it powerful without sacrificing correctness.
 \AgdaTarget{Strengthen}
 \begin{code}
   Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
-    ActorM IS ⊤₁ xs (λ _ → ys)
+    ActorM i IS ⊤₁ xs (λ _ → ys)
 \end{code}
 %</ActorMonadStrengthen>
 
@@ -434,44 +450,79 @@ making it powerful without sacrificing correctness.
 -- ========== Helpers for ActorM ==========
 --
 
+open ∞ActorM public
+
 -- coinduction helper for Value
-return₁ : {A : Set (suc zero)} → ∀ {IS post} → (val : A) → ∞ (ActorM IS A (post val) post)
-return₁ val = ♯ Return val
+return₁ : {A : Set (suc zero)} → ∀ {i IS post} → (val : A) →
+          ∞ActorM i IS A (post val) post
+return₁ val .force = Return val
 
 -- universe lifting for return₁
-return : {A : Set} → ∀ {IS post} → (val : A) → ∞ (ActorM IS (Lift A) (post (lift val)) post)
+return : {A : Set} → ∀ {i IS post} → (val : A) →
+         ∞ActorM i IS (Lift A) (post (lift val)) post
 return val = return₁ (lift val)
 
+_>>=_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
+  (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+  ∞ActorM i IS B pre post
+(m >>= f) .force = m ∞>>= f
+
+_∞>>_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre (λ _ → mid)) →
+  (n : ∞ActorM i IS B mid post) →
+  ActorM i IS B pre post
+m ∞>> n = m ∞>>= λ _ → n
+
+[mid:_]_>>=_ : ∀ {i IS A B pre post} → ∀ mid →
+  (m : ∞ActorM i IS A pre mid) →
+  (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+  ∞ActorM i IS B pre post
+[mid: mid ] m >>= f = _>>=_ {mid = mid} m f
+
+_>>_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre (λ _ → mid)) →
+  (n : ∞ActorM i IS B mid post) →
+  ∞ActorM i IS B pre post
+(m >> n) .force = m ∞>> n
+
+[mid:_]_>>_ : ∀ {i IS A B pre post} → ∀ mid →
+  (m : ∞ActorM i IS A pre (λ _ → mid)) →
+  (n : ∞ActorM i IS B mid (post)) →
+  ∞ActorM i IS B pre post
+[mid: mid ] m >> f = _>>_ {mid = mid} m f
+
 -- coinduction helper for spawn
-spawn : ∀ {IS NewIS A pre postN} →
-  ActorM NewIS A [] postN →
-  ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
-spawn newAct = ♯ Spawn newAct
+spawn : ∀ {i IS NewIS A pre postN} →
+  ActorM i NewIS A [] postN →
+  ∞ActorM (↑ i) IS ⊤₁ pre λ _ → NewIS ∷ pre
+spawn newAct .force = Spawn newAct
 
 -- spawn potentially infinite actors
-spawn∞ : ∀ {IS NewIS A pre postN} →
-  ∞ (ActorM NewIS A [] postN) →
-  ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
-spawn∞ newAct = spawn (♭ newAct)
+spawn∞ : ∀ {i IS NewIS A pre postN} →
+  ∞ActorM (↑ i) NewIS A [] postN →
+  ∞ActorM (↑ i) IS ⊤₁ pre λ _ → NewIS ∷ pre
+spawn∞ newAct = spawn (newAct .force)
 
 -- coinduction helper and neater syntax for message sending
-_![t:_]_ : ∀ {IS ToIS pre MT} →
+_![t:_]_ : ∀ {i IS ToIS pre MT} →
   (canSendTo : ToIS ∈ pre) →
   (MT ∈ ToIS) →
   All (send-field-content pre) MT →
-  ∞ (ActorM IS ⊤₁ pre (λ _ → pre))
-canSendTo ![t: p ] fields = ♯ Send canSendTo (SendM p fields)
+  ∞ActorM i IS ⊤₁ pre (λ _ → pre)
+(canSendTo ![t: p ] fields) .force = Send canSendTo (SendM p fields)
 
 -- coinduction helper for Receive
-receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-references pre))
-receive = ♯ Receive
+receive : ∀ {i IS pre} → ∞ActorM i IS (Message IS) pre (add-references pre)
+receive .force = Receive
+
+self : ∀ {i IS pre} → ∞ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
+self .force = Self
 
 -- coinduction helper for Strengthen
-strengthen : ∀ {IS xs ys} → ys ⊆ xs → ∞ (ActorM IS ⊤₁ xs (λ _ → ys))
-strengthen inc = ♯ Strengthen inc
+strengthen : ∀ {i IS xs ys} → ys ⊆ xs → ∞ActorM i IS ⊤₁ xs (λ _ → ys)
+strengthen inc .force = Strengthen inc
 
 ⊠-of-values : List Set → InboxShape
 ⊠-of-values [] = []
 ⊠-of-values (x ∷ vs) = (ValueType x ∷ []) ∷ ⊠-of-values vs
 \end{code}
 %</ActorMonadHelpers>
+

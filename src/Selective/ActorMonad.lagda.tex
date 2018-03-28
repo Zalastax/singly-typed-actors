@@ -8,8 +8,8 @@ open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; true ; false)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
 
-open import Coinduction using (∞ ; ♯_ ; ♭)
 open import Level using (Lift ; lift ; suc ; zero)
+open import Size using (Size ; Size<_ ; ↑_)
 
 mutual
   data MessageField : Set₁ where
@@ -40,14 +40,14 @@ send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
-  SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
+    SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
 
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
 
 data Message (To : InboxShape) : Set₁ where
-  Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
+    Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
 
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
@@ -83,79 +83,125 @@ add-selected-references Γ m = add-references Γ (SelectedMessage.msg m)
 %</SelectedMessageAddReferences>
 \begin{code}
 
-
+    
 ⊤₁ : Set₁
 ⊤₁ = Lift ⊤
 
-infixl 1 _>>=_
+infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 
-data ActorM (IS : InboxShape) : (A : Set₁) →
+data ActorM (i : Size) (IS : InboxShape) : (A : Set₁) →
                 (pre : TypingContext) →
                 (post : A → TypingContext) →
+                Set₂
+
+record ∞ActorM (i : Size) (IS : InboxShape) (A : Set₁)
+                (pre : TypingContext)
+                (post : A → TypingContext) :
                 Set₂ where
-    Return : ∀ {A post} → (val : A) → ActorM IS A (post val) post
-    _>>=_ : ∀ {A B pre mid post} → (m : ∞ (ActorM IS A pre mid)) →
-        (f : (x : A) → ∞ (ActorM IS B (mid x) (post))) →
-        ActorM IS B pre post
+    coinductive
+    constructor delay_
+    field force : ∀ {j : Size< i} → ActorM j IS A pre post
+
+data ActorM (i : Size) (IS : InboxShape) where
+    Return : ∀ {A post} → (val : A) → ActorM i IS A (post val) post
+    _∞>>=_ : ∀ {A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
+        (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+        ActorM i IS B pre post
     Spawn : {NewIS : InboxShape} → {A : Set₁} → ∀ {pre postN} →
-        ActorM NewIS A [] postN →
-        ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre
+        ActorM i NewIS A [] postN →
+        ActorM i IS ⊤₁ pre λ _ → NewIS ∷ pre
     Send : ∀ {pre} → {ToIS : InboxShape} →
         (canSendTo : pre ⊢ ToIS) →
         (msg : SendMessage ToIS pre) →
-        ActorM IS ⊤₁ pre (λ _ → pre)
-    Receive : ∀ {pre} → ActorM IS (Message IS) pre (add-references pre)
+        ActorM i IS ⊤₁ pre (λ _ → pre)
+    Receive : ∀ {pre} → ActorM i IS (Message IS) pre (add-references pre)
 \end{code}
 %<*SelectiveReceiveConstruct>
 \begin{code}
     SelectiveReceive : ∀ {pre} → (filter : MessageFilter IS) →
-      ActorM IS (SelectedMessage filter) pre (add-selected-references pre)
+      ActorM i IS (SelectedMessage filter) pre (add-selected-references pre)
 \end{code}
 %</SelectiveReceiveConstruct>
 \begin{code}
-    Self : ∀ {pre} → ActorM IS ⊤₁ pre (λ _ → IS ∷ pre)
+    Self : ∀ {pre} → ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
     Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
-        ActorM IS ⊤₁ xs (λ _ → ys)
+        ActorM i IS ⊤₁ xs (λ _ → ys)
 
 --
 -- ========== Helpers for ActorM ==========
 --
 
+open ∞ActorM public
+
 -- coinduction helper for Value
-return₁ : {A : Set (suc zero)} → ∀ {IS post} → (val : A) → ∞ (ActorM IS A (post val) post)
-return₁ val = ♯ Return val
+return₁ : {A : Set (suc zero)} → ∀ {i IS post} → (val : A) → ∞ActorM i IS A (post val) post
+return₁ val .force = Return val
 
 -- universe lifting for return₁
-return : {A : Set} → ∀ {IS post} → (val : A) → ∞ (ActorM IS (Lift A) (post (lift val)) post)
+return : {A : Set} → ∀ {i IS post} → (val : A) → ∞ActorM i IS (Lift A) (post (lift val)) post
 return val = return₁ (lift val)
 
+_>>=_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
+    (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+    ∞ActorM i IS B pre post
+(m >>= f) .force = m ∞>>= f
+
+_∞>>_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre (λ _ → mid)) →
+    (n : ∞ActorM i IS B mid post) →
+    ActorM i IS B pre post
+m ∞>> n = m ∞>>= λ _ → n
+
+[mid:_]_>>=_ : ∀ {i IS A B pre post} → ∀ mid →
+    (m : ∞ActorM i IS A pre mid) →
+    (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
+    ∞ActorM i IS B pre post
+[mid: mid ] m >>= f = _>>=_ {mid = mid} m f
+
+_>>_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre (λ _ → mid)) →
+    (n : ∞ActorM i IS B mid post) →
+    ∞ActorM i IS B pre post
+(m >> n) .force = m ∞>> n
+
+[mid:_]_>>_ : ∀ {i IS A B pre post} → ∀ mid →
+    (m : ∞ActorM i IS A pre (λ _ → mid)) →
+    (n : ∞ActorM i IS B mid (post)) →
+    ∞ActorM i IS B pre post
+[mid: mid ] m >> f = _>>_ {mid = mid} m f
+
 -- coinduction helper for spawn
-spawn : ∀ {IS NewIS A pre postN} →
-    ActorM NewIS A [] postN →
-    ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
-spawn newAct = ♯ Spawn newAct
+spawn : ∀ {i IS NewIS A pre postN} →
+    ActorM i NewIS A [] postN →
+    ∞ActorM (↑ i) IS ⊤₁ pre λ _ → NewIS ∷ pre
+spawn newAct .force = Spawn newAct
 
 -- spawn potentially infinite actors
-spawn∞ : ∀ {IS NewIS A pre postN} →
-    ∞ (ActorM NewIS A [] postN) →
-    ∞ (ActorM IS ⊤₁ pre λ _ → NewIS ∷ pre)
-spawn∞ newAct = spawn (♭ newAct)
+spawn∞ : ∀ {i IS NewIS A pre postN} →
+    ∞ActorM (↑ i) NewIS A [] postN →
+    ∞ActorM (↑ i) IS ⊤₁ pre λ _ → NewIS ∷ pre
+spawn∞ newAct = spawn (newAct .force)
 
 -- coinduction helper and neater syntax for message sending
-_![t:_]_ : ∀ {IS ToIS pre MT} →
+_![t:_]_ : ∀ {i IS ToIS pre MT} →
     (canSendTo : ToIS ∈ pre) →
     (MT ∈ ToIS) →
     All (send-field-content pre) MT →
-    ∞ (ActorM IS ⊤₁ pre (λ _ → pre))
-canSendTo ![t: p ] fields = ♯ Send canSendTo (SendM p fields)
+    ∞ActorM i IS ⊤₁ pre (λ _ → pre)
+(canSendTo ![t: p ] fields) .force = Send canSendTo (SendM p fields)
 
 -- coinduction helper for Receive
-receive : ∀ {IS pre} → ∞ (ActorM IS (Message IS) pre (add-references pre))
-receive = ♯ Receive
+receive : ∀ {i IS pre} → ∞ActorM i IS (Message IS) pre (add-references pre)
+receive .force = Receive
+
+selective-receive : ∀ {i IS pre} → (filter : MessageFilter IS) →
+  ∞ActorM i IS (SelectedMessage filter) pre (add-selected-references pre)
+selective-receive filter .force = SelectiveReceive filter
+
+self : ∀ {i IS pre} → ∞ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
+self .force = Self
 
 -- coinduction helper for Strengthen
-strengthen : ∀ {IS xs ys} → ys ⊆ xs → ∞ (ActorM IS ⊤₁ xs (λ _ → ys))
-strengthen inc = ♯ Strengthen inc
+strengthen : ∀ {i IS xs ys} → ys ⊆ xs → ∞ActorM i IS ⊤₁ xs (λ _ → ys)
+strengthen inc .force = Strengthen inc
 
 ⊠-of-values : List Set → InboxShape
 ⊠-of-values [] = []

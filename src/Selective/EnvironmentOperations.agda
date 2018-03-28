@@ -19,6 +19,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; co
 open import Relation.Nullary using (Dec ; yes ; no)
 
 open import Level using (Lift ; lift ; Level) renaming (suc to lsuc)
+open import Size using (∞)
 
 open Actor
 open ValidActor
@@ -27,7 +28,7 @@ open NamedInbox
 
 -- We can create a new Actor from an ActorM if we know its name.
 -- This is used when spawning an actor.
-new-actor : ∀ {IS A post} → ActorM IS A [] post → Name → Actor
+new-actor : ∀ {IS A post} → ActorM ∞ IS A [] post → Name → Actor
 new-actor {IS} {A} {post} m name = record
                                         { inbox-shape = IS
                                         ; A = A
@@ -42,7 +43,7 @@ new-actor {IS} {A} {post} m name = record
 -- An actor can be lifted to run sub-programs that need less references
 lift-actor : (actor : Actor) → {pre : TypingContext} → (references : Store) →
               (pre-eq-refs : (map shape references) ≡ pre) →
-              ActorM (inbox-shape actor) (A actor) pre (post actor) → Actor
+              ActorM ∞ (inbox-shape actor) (A actor) pre (post actor) → Actor
 lift-actor actor {pre} references pre-eq-refs m = record
                                               { inbox-shape = inbox-shape actor
                                               ; A = A actor
@@ -56,7 +57,7 @@ lift-actor actor {pre} references pre-eq-refs m = record
 
 -- Replace the monadic part of an actor
 -- Many of the bind-operations don't change anything except what the next step should be.
-replace-actorM : (actor : Actor) → ActorM (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
+replace-actorM : (actor : Actor) → ActorM ∞ (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
 replace-actorM actor m = record
                            { inbox-shape = inbox-shape actor
                            ; A = A actor
@@ -71,7 +72,7 @@ replace-actorM actor m = record
 -- Add one reference to an actor.
 -- Used when receiving a reference, spawn, or self.
 -- The precondition and references are equal via the congruence relation on consing the shape of the reference.
-add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
+add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
 add-reference actor nm m = record
                              { inbox-shape = inbox-shape actor
                              ; A = A actor
@@ -83,7 +84,7 @@ add-reference actor nm m = record
                              ; name = name actor
                              }
 
-add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
+add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
 add-references-to-actor actor nms m = record
                                         { inbox-shape = inbox-shape actor
                                         ; A = A actor
@@ -95,7 +96,10 @@ add-references-to-actor actor nms m = record
                                         ; name = name actor
                                         }
 
-add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} → map shape nms ++ pre actor ≡ add-references (pre actor) x → ActorM (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) → Actor
+add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} →
+  map shape nms ++ pre actor ≡ add-references (pre actor) x →
+  ActorM ∞ (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) →
+  Actor
 add-references-rewrite actor nms {x} p m = record
                              { inbox-shape = inbox-shape actor
                              ; A = A actor
@@ -122,14 +126,13 @@ rewrap-valid-actor va refl refl refl = record { actor-has-inbox = actor-has-inbo
 
 record ValidMessageList (store : Store) (S : InboxShape) : Set₁ where
   field
-    inbox : List (NamedMessage S)
+    inbox : Inbox S
     valid : All (message-valid store) inbox
 
-record UpdatedInboxes (store : Store) (original : Inboxes) : Set₂ where
+record UpdatedInboxes (store : Store)  {store' : Store} (original : Inboxes store') : Set₂ where
   field
-    updated-inboxes : Inboxes
-    inboxes-valid : All (all-messages-valid store) updated-inboxes
-    same-store : inboxes-to-store original ≡ inboxes-to-store updated-inboxes
+    updated-inboxes : Inboxes store'
+    inboxes-valid : InboxesValid store updated-inboxes
 
 open ValidMessageList
 open UpdatedInboxes
@@ -144,25 +147,16 @@ open UpdatedInboxes
 -- and has to provide a proof that this list is also valid for the store
 update-inboxes : {name : Name} → {IS : InboxShape} →
   (store : Store) →
-  (inboxes : Inboxes) →
-  (All (all-messages-valid store) inboxes) →
-  (name ↦ IS ∈e (inboxes-to-store inboxes)) →
+  {store' : Store} → (inboxes : Inboxes store') →
+  (InboxesValid store inboxes) →
+  (name ↦ IS ∈e store') →
   (f : ValidMessageList store IS → ValidMessageList store IS) →
   UpdatedInboxes store inboxes
-update-inboxes store [] [] () f
-update-inboxes store (x ∷ inboxes) (px ∷ proofs) zero f with (f (record { inbox = Inbox.inbox-messages x ; valid = px }))
-... | updated = record {
-  updated-inboxes = updatedInbox ∷ inboxes
-  ; inboxes-valid = (valid updated) ∷ proofs
-  ; same-store = refl }
-  where
-    updatedInbox : Inbox
-    updatedInbox = record { inbox-shape = Inbox.inbox-shape x ; inbox-messages = inbox updated ; name = Inbox.name x }
-update-inboxes store (x ∷ inboxes) (px ∷ proofs) (suc reference) f with (update-inboxes store inboxes proofs reference f)
-... | updatedInboxes = record {
-  updated-inboxes = x ∷ updated-inboxes updatedInboxes
-  ; inboxes-valid = px ∷ inboxes-valid updatedInboxes
-  ; same-store = cong (_∷_ inbox# (Inbox.name x) [ Inbox.inbox-shape x ]) (same-store updatedInboxes) }
+update-inboxes _ _ [] () _
+update-inboxes store (x ∷ inboxes) (px ∷ proofs) zero f with (f (record { inbox = x ; valid = px }))
+... | updated = record { updated-inboxes = (inbox updated) ∷ inboxes ; inboxes-valid = (valid updated) ∷ proofs }
+update-inboxes store (x ∷ inboxes) (px ∷ proofs) (suc p) f with (update-inboxes store inboxes proofs p f)
+... | updated = record { updated-inboxes = x ∷ updated-inboxes updated ; inboxes-valid = px ∷ (inboxes-valid updated) }
 
 -- Move the actor that is at the top of the list, to the back of the list
 -- This is done to create a round-robin system for the actors, since run-env always picks the actor at the top
@@ -176,7 +170,6 @@ top-actor-to-back env | x ∷ acts | (y ∷ prfs) = record
                              ; blocked = blocked env
                              ; env-inboxes = env-inboxes env
                              ; store = store env
-                             ; inbs=store = inbs=store env
                              ; fresh-name = fresh-name env
                              ; actors-valid = ++⁺ prfs (y ∷ [])
                              ; blocked-valid = blocked-valid env
@@ -195,7 +188,6 @@ drop-top-actor env | _ ∷ rest | _ ∷ prfs = record
                                   ; blocked = blocked env
                                   ; env-inboxes = env-inboxes env
                                   ; store = store env
-                                  ; inbs=store = inbs=store env
                                   ; fresh-name = fresh-name env
                                   ; actors-valid = prfs
                                   ; blocked-valid = blocked-valid env
@@ -240,30 +232,23 @@ valid-actor-suc frsh va = record {
     open _comp↦_∈_
 
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
-messages-valid-suc : ∀ {store inb n x} → (NameFresh store n) → all-messages-valid store inb → all-messages-valid (inbox# n [ x ] ∷ store) inb
-messages-valid-suc {store} {inb} {n} {x} frsh vi = do-the-work n x (Inbox.inbox-shape inb) (Inbox.inbox-messages inb) vi frsh
+messages-valid-suc : ∀ {store IS n x} {inb : Inbox IS} → (NameFresh store n) → all-messages-valid store inb → all-messages-valid (inbox# n [ x ] ∷ store) inb
+messages-valid-suc {store} {IS} {n} {x} frsh [] = []
+messages-valid-suc {store} {IS} {n} {x} {nx ∷ _} frsh (px ∷ vi) = message-valid-suc nx px ∷ (messages-valid-suc frsh vi)
   where
     open _comp↦_∈_
-    fields-valid-suc : ∀ {MT} (x₂ : All named-field-content MT) →
-      all-fields-have-pointer store x₂ → all-fields-have-pointer (inbox# n [ x ] ∷ store) x₂
-    fields-valid-suc {[]} [] p = p
-    fields-valid-suc {ValueType x₁ ∷ MT} (_ ∷ x₂) (_ , ps) = _ , fields-valid-suc x₂ ps
-    fields-valid-suc {ReferenceType x₁ ∷ MT} (px ∷ x₂) (p , ps) = suc-p (suc-helper (actual-has-pointer p) frsh) p , fields-valid-suc x₂ ps
-    msgValidSuc : (x₁ : NamedMessage (Inbox.inbox-shape inb)) →
-                  message-valid store x₁ → message-valid (inbox# n [ x ] ∷ store) x₁
-    msgValidSuc (NamedM x₁ x₂) mv = fields-valid-suc x₂ mv
-    message-valid-suc : ∀ {MT} (x₂ : All named-field-content MT) → all-fields-have-pointer store x₂ → ∀ n x → (NameFresh store n) → all-fields-have-pointer (inbox# n [ x ] ∷ store) x₂
-    message-valid-suc {[]} [] hj n x frsh = _
-    message-valid-suc {ValueType x₁ ∷ MT} (px ∷ x₂) (_ , hj) n x frsh = _ , message-valid-suc x₂ hj n x frsh
-    message-valid-suc {ReferenceType x₁ ∷ MT} (name ∷ x₂) (px , hj) n x frsh = (suc-p (suc-helper (actual-has-pointer px) frsh) px) , message-valid-suc x₂ hj n x frsh
-    do-the-work : ∀ n x w (w₁ : List (NamedMessage w)) → All (message-valid store) w₁ → NameFresh store n →
-                  All (message-valid (inbox# n [ x ] ∷ store)) w₁
-    do-the-work n x w [] prfs frsh = []
-    do-the-work n x w (NamedM x₁ x₂ ∷ w₁) (px ∷ prfs) frsh = message-valid-suc x₂ px n x frsh ∷ (do-the-work n x w w₁ prfs frsh)
+    fields-valid-suc : ∀ {MT} {fields : All named-field-content MT} →
+      FieldsHavePointer store fields →
+      FieldsHavePointer (inbox# n [ x ] ∷ store) fields
+    fields-valid-suc [] = []
+    fields-valid-suc (v+ valid) = v+ fields-valid-suc valid
+    fields-valid-suc (x ∷r valid) = (suc-p (suc-helper (actual-has-pointer x) frsh) x) ∷r (fields-valid-suc valid)
+    message-valid-suc : (nx : NamedMessage IS) → message-valid store nx → message-valid (inbox# n [ x ] ∷ store) nx
+    message-valid-suc (NamedM x₁ x₂) px = fields-valid-suc px
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
-add-top : ∀ {IS A post} → ActorM IS A [] post → Env → Env
+add-top : ∀ {IS A post} → ActorM ∞ IS A [] post → Env → Env
 add-top {IS} {A} {post} actor-m env = record
                                  { acts = record
                                             { inbox-shape = IS
@@ -276,32 +261,33 @@ add-top {IS} {A} {post} actor-m env = record
                                             ; name = fresh-name env
                                             } ∷ acts env
                                  ; blocked = blocked env
-                                 ; env-inboxes = record { inbox-shape = IS ; inbox-messages = [] ; name = fresh-name env } ∷ env-inboxes env
+                                 ; env-inboxes = [] ∷ env-inboxes env
                                  ; store = inbox# fresh-name env [ IS ] ∷ store env
-                                 ; inbs=store = cong (_∷_ inbox# fresh-name env [ IS ]) (inbs=store env)
                                  ; fresh-name = suc (fresh-name env)
                                  ; actors-valid = record { actor-has-inbox = zero ; references-have-pointer = [] } ∷ ∀map (valid-actor-suc (name-is-fresh env)) (actors-valid env)
                                  ; blocked-valid = ∀map (valid-actor-suc (name-is-fresh env)) (blocked-valid env)
-                                 ; messages-valid = [] ∷ ∀map (λ {x} vi → messages-valid-suc {_} {x} (name-is-fresh env) vi) (messages-valid env)
+                                 ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (name-is-fresh env)
                                  ; name-is-fresh = Data.Nat.s≤s (≤-reflexive refl) ∷ ∀map  Data.Nat.Properties.≤-step (name-is-fresh env)
                                  }
+  where
+    map-suc : (store : Store) → {store' : Store} → {inbs : Inboxes store'} → InboxesValid store inbs → ∀ {n} → (NameFresh store n) → InboxesValid (inbox# n [ IS ] ∷ store) inbs
+    map-suc store [] frsh = []
+    map-suc store (x ∷ valid) frsh = messages-valid-suc frsh x ∷ (map-suc store valid frsh)
 
 record GetInbox (store : Store) (S : InboxShape) : Set₂ where
   field
-    messages : List (NamedMessage S)
-    valid : All (message-valid store) messages
+    messages : Inbox S
+    valid : all-messages-valid store messages
 
 -- Get the messages of an inbox pointed to in the environment.
 -- This is just a simple lookup into the list of inboxes.
 get-inbox : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (store env) → GetInbox (store env) IS
-get-inbox env point = loop (env-inboxes env) (messages-valid env) (fix-the-point point (inbs=store env))
+get-inbox env point = loop (env-inboxes env) (messages-valid env) point
   where
-    fix-the-point : ∀ {name IS} → name ↦ IS ∈e store env → store env ≡ inboxes-to-store (env-inboxes env) → name ↦ IS ∈e inboxes-to-store (env-inboxes env)
-    fix-the-point p refl = p
-    loop : ∀ {name IS} → (inboxes : Inboxes) → All (all-messages-valid (store env)) inboxes → name ↦ IS ∈e (inboxes-to-store inboxes) → GetInbox (store env) IS
-    loop [] [] ()
-    loop (x ∷ _) (px ∷ prfs) zero = record { messages = Inbox.inbox-messages x ; valid = px }
-    loop (_ ∷ inboxes) (_ ∷ prfs) (suc point) = loop inboxes prfs point
+    loop : {store store' : Store} → (inbs : Inboxes store') → InboxesValid store inbs → ∀ {name IS} → name ↦ IS ∈e store' → GetInbox store IS
+    loop _ [] ()
+    loop (x ∷ _) (px ∷ _) zero = record { messages = x ; valid = px }
+    loop (_ ∷ inbs) (_ ∷ valid) (suc point) = loop inbs valid point
 
 -- Updates an inbox in the environment
 -- Just a wrapper arround 'updateInboxes'
@@ -310,20 +296,16 @@ update-inbox-env : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (store env
 update-inbox-env {name} {IS} env p f = record
                            { acts = acts env
                            ; blocked = blocked env
-                           ; env-inboxes = updated-inboxes updatedInboxes
+                           ; env-inboxes = updated-inboxes updated
                            ; store = store env
-                           ; inbs=store = trans (inbs=store env) (same-store updatedInboxes)
                            ; fresh-name = fresh-name env
                            ; actors-valid = actors-valid env
                            ; blocked-valid = blocked-valid env
-                           ; messages-valid = inboxes-valid updatedInboxes
+                           ; messages-valid = inboxes-valid updated
                            ; name-is-fresh = name-is-fresh env
                            }
   where
-    -- Just some helpers to align the types
-    pp : name ↦ IS ∈e (inboxes-to-store (env-inboxes env))
-    pp rewrite (inbs=store env) = p
-    updatedInboxes = update-inboxes (store env) (env-inboxes env) (messages-valid env) pp f
+    updated = update-inboxes (store env) (env-inboxes env) (messages-valid env) p f
 
 -- Move an actor from the blocked list to the actors list.
 -- Simply looks through the names of all blocked actors and moves those (should be just 1 or 0) with the same name.
@@ -346,7 +328,6 @@ unblock-actor env name = newEnv (loop (blocked env) (blocked-valid env))
                                                              ; blocked = ba
                                                              ; env-inboxes = env-inboxes env
                                                              ; store = store env
-                                                             ; inbs=store = inbs=store env
                                                              ; fresh-name = fresh-name env
                                                              ; actors-valid = ++⁺ (actors-valid env) unblockedValid
                                                              ; blocked-valid = baValid
@@ -423,7 +404,6 @@ replace-actors env actors actorsValid = record {
   ; blocked = blocked env
   ; env-inboxes = env-inboxes env
   ; store = store env
-  ; inbs=store = inbs=store env
   ; fresh-name = fresh-name env
   ; actors-valid = actorsValid
   ; blocked-valid = blocked-valid env
@@ -440,7 +420,6 @@ replace-actors+blocked env actors actorsValid blocked blockedValid = record {
   ; blocked = blocked
   ; env-inboxes = env-inboxes env
   ; store = store env
-  ; inbs=store = inbs=store env
   ; fresh-name = fresh-name env
   ; actors-valid = actorsValid
   ; blocked-valid = blockedValid
@@ -457,7 +436,6 @@ add-message message valid vml = record { inbox = inbox vml ++ (message ∷ []) ;
 -- This is a no-op if there are no messages in the inbox.
 remove-message : {S : InboxShape} → {store : Store} → (ValidMessageList store S → ValidMessageList store S)
 remove-message vml = record { inbox = drop 1 (inbox vml) ; valid = drop⁺ 1 (ValidMessageList.valid vml) }
-
 
 name-fields : ∀ {MT store} → (pre : TypingContext) →
                (refs : List NamedInbox) →
@@ -479,7 +457,7 @@ unname-field {ValueType x₁} nfc = nfc
 unname-field {ReferenceType x₁} nfc = _
 
 unname-message : ∀ {S} → NamedMessage S → Message S
-unname-message (NamedM x fields) = Msg x (do-the-work fields) -- (∀map unname-field fields)
+unname-message (NamedM x fields) = Msg x (do-the-work fields)
   where
     do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
     do-the-work {[]} nfc = []
@@ -513,19 +491,19 @@ add-references++ msg@(NamedM {MT} x x₁) p w = halp (add-fields++ MT x₁)
     add-fields++ (ValueType x ∷ MT) (px ∷ x₁) = add-fields++ MT x₁
     add-fields++ (ReferenceType x ∷ MT) (px ∷ x₁) = cong (_∷_ x) (add-fields++ MT x₁)
 
-valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ w →
+valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ {w} →
         All (reference-has-pointer store) w →
         All (reference-has-pointer store) (named-inboxes nm ++ w)
-valid++ (NamedM x x₁) v p = valid-fields x₁ v p
+valid++ (NamedM x x₁) v = valid-fields v
   where
     valid-fields : ∀ {MT store} →
-                   (x₁ : All named-field-content MT) →
-                   all-fields-have-pointer store x₁ → ∀ p →
+                   {fields : All named-field-content MT} →
+                   FieldsHavePointer store fields → ∀ {p} →
                    All (reference-has-pointer store) p →
-                   All (reference-has-pointer store) (extract-inboxes x₁ ++ p)
-    valid-fields [] h p ps = ps
-    valid-fields (_∷_ {ValueType x} px x₁) (_ , h) p ps = valid-fields x₁ h p ps
-    valid-fields (_∷_ {ReferenceType x} px x₁) (hj , h) p ps = hj ∷ (valid-fields x₁ h p ps)
+                   All (reference-has-pointer store) (extract-inboxes fields ++ p)
+    valid-fields [] ps = ps
+    valid-fields (v+ fhp) ps = valid-fields fhp ps
+    valid-fields (px ∷r fhp) ps = px ∷ (valid-fields fhp ps)
 
 open _⊢>:_
 
@@ -544,13 +522,15 @@ make-pointer-compatible : ∀ store x refs
                        name w comp↦ x ∈ store
 make-pointer-compatible store x refs px rhp w = [p: actual-has-pointer (reference w) ][handles: compatible-handles store x refs px w ]
 
+open FieldsHavePointer
+
 make-pointers-compatible : ∀ {MT} store pre refs (eq : map shape refs ≡ pre)
                            (fields : All (send-field-content pre) MT)
                            (rhp : All (reference-has-pointer store) refs) →
-                         all-fields-have-pointer store (name-fields pre refs rhp fields eq)
-make-pointers-compatible store pre refs eq [] rhp = _
-make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = _ , (make-pointers-compatible store _ refs refl fields rhp)
-make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = make-pointer-compatible store x refs px rhp foundFw , (make-pointers-compatible store _ refs refl fields rhp)
+                         FieldsHavePointer store (name-fields pre refs rhp fields eq)
+make-pointers-compatible store pre refs eq [] rhp = []
+make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = v+ make-pointers-compatible store _ refs refl fields rhp
+make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = (make-pointer-compatible store x refs px rhp foundFw) ∷r (make-pointers-compatible store _ refs refl fields rhp)
   where
     foundFw : FoundReference store (actual px)
     foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)

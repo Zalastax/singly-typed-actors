@@ -10,18 +10,18 @@ open import Data.Empty using (⊥)
 \end{code}
 %<*ElementIn>
 \begin{code}
-data _∈_ {a} {A : Set a} : A → (List A) -> Set a where
+data _∈_ {a} {A : Set a} : A → (List A) → Set a where
   Z : ∀ {x xs} → x ∈ (x ∷ xs)
-  S : ∀ {x y xs} → x ∈ xs -> x ∈ (y ∷ xs)
+  S : ∀ {x y xs} → x ∈ xs → x ∈ (y ∷ xs)
 \end{code}
 %</ElementIn>
 \begin{code}
 x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
 x∈[]-⊥ ()
 
-data _⊆_ {a} {A : Set a} : List A -> List A -> Set a where
+data _⊆_ {a} {A : Set a} : List A → List A → Set a where
   [] : ∀ {xs} → [] ⊆ xs
-  _∷_ : ∀ {x xs ys} → x ∈ ys -> xs ⊆ ys -> (x ∷ xs) ⊆ ys
+  _∷_ : ∀ {x xs ys} → x ∈ ys → xs ⊆ ys → (x ∷ xs) ⊆ ys
 
 ⊆-suc : ∀ {a} {A : Set a} {y : A} {xs ys : List A} → xs ⊆ ys → xs ⊆ (y ∷ ys)
 ⊆-suc [] = []

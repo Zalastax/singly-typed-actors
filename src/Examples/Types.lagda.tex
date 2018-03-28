@@ -3,14 +3,35 @@ module Examples.Types where
 
 open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc)
+open import Data.Nat using (ℕ ; zero ; suc ; _+_)
 open import Data.Vec using (Vec ; [] ;  _∷_)
 open import Data.List using (List ; [] ; _∷_)
 open import Data.String using (String)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
 open import ActorMonad
 
 \end{code}
+
+%<*PropositionalEquality>
+\begin{code}
+data _≡_ {a} {A : Set a} (x : A) : A → Set a where
+  refl : x ≡ x
+
+trivial = 4 ≡ 4
+definitional = (2 + 2) ≡ 4
+\end{code}
+%</PropositionalEquality>
+
+%<*Cong>
+\begin{code}
+cong : ∀ {a} {A B : Set a} {m n : A} → (f : A → B) → m ≡ n → f m ≡ f n
+cong f refl = refl
+
+
+id-0 : (n : ℕ) → (n + 0) ≡ (0 + n)
+id-0 zero = refl
+id-0 (suc n) = cong suc (id-0 n)
+\end{code}
+%</Cong>
 
 %<*unfortunate>
 \begin{code}
@@ -53,3 +74,22 @@ partial 2 p =  false
 partial (suc (suc (suc n))) ()
 \end{code}
 %</PartialFunction>
+
+%<*Identity>
+\begin{code}
+identity : (A : Set) → A → A
+identity A x = x
+\end{code}
+%</Identity>
+
+%<*ImplicitIdentity>
+\begin{code}
+identity' : {A : Set} → A → A
+identity' x = x
+
+f : ℕ → ℕ
+f = identity'
+g = identity' {Bool}
+h = identity' 2
+\end{code}
+%</ImplicitIdentity>

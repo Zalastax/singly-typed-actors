@@ -1,0 +1,16 @@
+\begin{code}
+module Examples.NonTermination where
+\end{code}
+
+%<*ProveAnything>
+\begin{code}
+{-# NON_TERMINATING #-}
+anything : ∀ {a} {A : Set a} → A
+anything = anything
+
+data ⊥ : Set where
+
+can-prove-⊥ : ⊥
+can-prove-⊥ = anything
+\end{code}
+%</ProveAnything>

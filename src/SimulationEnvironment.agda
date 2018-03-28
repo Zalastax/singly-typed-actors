@@ -9,6 +9,7 @@ open import Data.Nat using (ℕ ; _≟_)
 open import Data.Unit using (⊤ ; tt)
 
 open import Level using (Lift ; lift)
+open import Size using (∞)
 
 open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
@@ -91,7 +92,7 @@ record Actor : Set₂ where
     pre         : TypingContext
     pre-eq-refs : (map NamedInbox.shape references) ≡ pre
     post        : A → TypingContext
-    actor-m     : ActorM inbox-shape A pre post
+    actor-m     : ActorM ∞ inbox-shape A pre post
     name        : Name
 
 named-field-content : MessageField → Set
@@ -216,7 +217,7 @@ empty-env = record
 
 -- An environment containing a single actor.
 -- The actor can't have any known references
-singleton-env : ∀ {IS A post} → ActorM IS A [] post → Env
+singleton-env : ∀ {IS A post} → ActorM ∞ IS A [] post → Env
 singleton-env {IS} {A} {post} actor = record
                        { acts = record
                                   { inbox-shape = IS

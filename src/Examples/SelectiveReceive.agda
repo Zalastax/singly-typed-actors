@@ -6,8 +6,8 @@ open import Data.List.All using (All ; _∷_ ; [])
 open import Data.List.Properties using (++-assoc ; ++-identityʳ)
 open import Data.Bool using (Bool ; if_then_else_ ; false ; true)
 open import Data.Nat using (ℕ ; zero ; suc)
-open import Coinduction
 open import Level using (Level ; Lift ; lift) renaming (zero to lzero ; suc to lsuc)
+open import Size using (Size ; ↑_)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
 open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-trans ; ⊆-suc)
@@ -142,17 +142,17 @@ record SelRec (IS : InboxShape) (f : Message IS → Bool) : Set₁ where
 
 open SelRec
 
-selective-receive : ∀ {IS pre} → (q : List (Message IS)) → (f : Message IS → Bool) → ActorM IS (SelRec IS f) (pre ++ (waiting-refs q)) (λ m → (add-references pre (msg m)) ++ (waiting-refs (waiting m)))
-selective-receive {IS} {pre} q f = case-of-find (find-split q f)
+selective-receive : ∀ {i IS pre} → (q : List (Message IS)) → (f : Message IS → Bool) → ∞ActorM i IS (SelRec IS f) (pre ++ (waiting-refs q)) (λ m → (add-references pre (msg m)) ++ (waiting-refs (waiting m)))
+selective-receive {IS = IS} {pre} q f = case-of-find (find-split q f)
   where
-    case-of-find : FoundInList q f → ActorM IS (SelRec IS f) (pre ++ waiting-refs q) (λ m → add-references pre (msg m) ++ waiting-refs (waiting m))
-    case-of-find (Found split x) = strengthen (accept-found pre q split) >>= λ _ → (return₁ (record { msg = el split ; right-msg = x ; waiting = (heads split) ++ (tails split) }))
-    case-of-find Nothing = receive >>= handle-receive
+    case-of-find : ∀ {i} → FoundInList q f → ∞ActorM i IS (SelRec IS f) (pre ++ waiting-refs q) (λ m → add-references pre (msg m) ++ waiting-refs (waiting m))
+    case-of-find (Found split x) .force = strengthen (accept-found pre q split) ∞>> return₁ (record { msg = el split ; right-msg = x ; waiting = (heads split) ++ (tails split) })
+    case-of-find Nothing .force = receive ∞>>= handle-receive
       where
-        handle-receive : (x : Message IS) → ∞ (ActorM IS (SelRec IS f) (add-references (pre ++ waiting-refs q) x) (λ m → (add-references pre (msg m) ++ waiting-refs (waiting m))))
+        handle-receive : ∀ {i} (x : Message IS) → ∞ActorM i IS (SelRec IS f) (add-references (pre ++ waiting-refs q) x) (λ m → (add-references pre (msg m) ++ waiting-refs (waiting m)))
         handle-receive x with (f x) | (inspect f x)
-        handle-receive x | false | p = ♯ (strengthen (move-received pre q x) >>= λ _ → (♯ selective-receive (q ++ (x ∷ [])) f))
-        handle-receive x | true | [ p ] = ♯ ( strengthen (accept-received pre q x) >>= λ _ → (return₁ ret-v))
+        handle-receive {i} x  | false | p = strengthen (move-received pre q x) >> selective-receive (q ++ (x ∷ [])) f
+        handle-receive x | true | [ p ] = strengthen (accept-received pre q x) >> return₁ ret-v
           where
             ret-v : SelRec IS f
             ret-v = record { msg = x ; right-msg = p ; waiting = q }
@@ -160,15 +160,15 @@ selective-receive {IS} {pre} q f = case-of-find (find-split q f)
 SelectiveTestBox : InboxShape
 SelectiveTestBox = (ValueType Bool ∷ []) ∷ []
 
-testActor : ActorM SelectiveTestBox (Lift Bool) [] (λ _ → [])
-testActor = _>>=_ {SelectiveTestBox} {SelRec SelectiveTestBox only-true} {Lift Bool} {[]} {λ m → add-references [] (msg m) ++ waiting-refs (waiting m)} (♯ selective-receive [] only-true) after-receive
+testActor : ∀ {i} → ActorM i SelectiveTestBox (Lift Bool) [] (λ _ → [])
+testActor = selective-receive [] only-true ∞>>= after-receive
   where
     only-true : Message SelectiveTestBox → Bool
     only-true (Msg Z (b ∷ [])) = b
     only-true (Msg (S ()) x₁)
-    after-receive : (x : SelRec SelectiveTestBox only-true) → ∞ (ActorM SelectiveTestBox (Lift Bool) (add-references [] (msg x) ++ waiting-refs (waiting x)) (λ _ → []))
-    after-receive record { msg = (Msg Z (.true ∷ [])) ; right-msg = refl ; waiting = waiting } = ♯ (strengthen [] >>= λ _ → (return true))
+    after-receive : ∀ {i} (x : SelRec SelectiveTestBox only-true) → ∞ActorM i SelectiveTestBox (Lift Bool) (add-references [] (msg x) ++ waiting-refs (waiting x)) (λ _ → [])
+    after-receive record { msg = (Msg Z (.true ∷ [])) ; right-msg = refl ; waiting = waiting } = strengthen [] >> return true
     after-receive record { msg = (Msg (S ()) x₁) ; right-msg = right-msg ; waiting = waiting }
 
-spawner : ActorM [] ⊤₁ [] (λ _ → [])
-spawner = spawn testActor >>= λ _ → ♯ ((Z ![t: Z ] ((lift false) ∷ [])) >>= λ _ → strengthen [] )
+spawner : ∀ {i} → ActorM i [] ⊤₁ [] (λ _ → [])
+spawner = spawn testActor ∞>> ((Z ![t: Z ] ((lift false) ∷ [])) >> strengthen [])
