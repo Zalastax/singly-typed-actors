@@ -65,6 +65,6 @@ calltestActor .force = spawn∞ calculatorActor ∞>>
                        return-result x
   where
     return-result : SelRec TestBox (call-select (Z ∷ []) Z) → ∀ {i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
-    return-result record { msg = (Msg Z (px ∷ x₁)) ; right-msg = right-msg ; waiting = waiting } = return px
-    return-result record { msg = (Msg (S x) x₁) ; right-msg = () }
+    return-result record { msg = (Msg Z (px ∷ x₁)) } = return px
+    return-result record { msg = (Msg (S x) x₁) ; msg-ok = () }
 
