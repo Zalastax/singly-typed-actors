@@ -1,3 +1,4 @@
+\begin{code}
 module Selective.Examples.Call where
 
 open import Selective.ActorMonad public
@@ -52,11 +53,18 @@ call : ∀ {Γ MtTo MtIn i} {To IS IS' : InboxShape} →
        ∞ActorM i IS
          (SelectedMessage (call-select tag ISsubs whichIn))
          Γ (add-selected-references Γ)
-call {Γ} {IS = IS} var toFi tag vals sub whichIn = do
+call {Γ} {IS = IS} var toFi tag vals sub whichIn =
+\end{code}
+%<*CallComputation>
+\begin{code}
+  do
      self
      S var ![t: toFi ] ((lift tag) ∷ ([ Z ]>: sub) ∷ (translate-fields vals))
      strengthen (⊆-suc ⊆-refl)
      selective-receive (call-select tag sub whichIn)
+\end{code}
+%</CallComputation>
+\begin{code}
   where
     translate-fields : ∀ {MT} →
                        All (send-field-content Γ) MT →
@@ -104,3 +112,4 @@ calltestActor .force = spawn∞ calculatorActor ∞>> (do
     return-result record { msg = (Msg Z (tag ∷ n ∷ [])) } = return n
     return-result record { msg = (Msg (S x) x₁) ; msg-ok = () }
 
+\end{code}

@@ -1,3 +1,4 @@
+\begin{code}
 module Examples.Call where
 
 open import ActorMonad public
@@ -115,3 +116,4 @@ calltestActor .force = spawn∞ calculatorActor ∞>>
     return-result record { msg = (Msg Z (tag ∷ n ∷ [])) } = return n
     return-result record { msg = (Msg (S x) x₁) ; msg-ok = () }
 
+\end{code}
