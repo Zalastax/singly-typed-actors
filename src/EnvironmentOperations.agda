@@ -240,8 +240,8 @@ messages-valid-suc {store} {IS} {n} {x} {nx ∷ _} frsh (px ∷ vi) = message-va
       FieldsHavePointer store fields →
       FieldsHavePointer (inbox# n [ x ] ∷ store) fields
     fields-valid-suc [] = []
-    fields-valid-suc (v+ valid) = v+ fields-valid-suc valid
-    fields-valid-suc (x ∷r valid) = (suc-p (suc-helper (actual-has-pointer x) frsh) x) ∷r (fields-valid-suc valid)
+    fields-valid-suc (FhpV ∷ valid) = FhpV ∷ fields-valid-suc valid
+    fields-valid-suc (FhpR x ∷ valid) = FhpR (suc-p (suc-helper (actual-has-pointer x) frsh) x) ∷ (fields-valid-suc valid)
     message-valid-suc : (nx : NamedMessage IS) → message-valid store nx → message-valid (inbox# n [ x ] ∷ store) nx
     message-valid-suc (NamedM x₁ x₂) px = fields-valid-suc px
 
@@ -501,8 +501,8 @@ valid++ (NamedM x x₁) v = valid-fields v
                    All (reference-has-pointer store) p →
                    All (reference-has-pointer store) (extract-inboxes fields ++ p)
     valid-fields [] ps = ps
-    valid-fields (v+ fhp) ps = valid-fields fhp ps
-    valid-fields (px ∷r fhp) ps = px ∷ (valid-fields fhp ps)
+    valid-fields (FhpV ∷ fhp) ps = valid-fields fhp ps
+    valid-fields (FhpR px ∷ fhp) ps = px ∷ (valid-fields fhp ps)
 
 open _⊢>:_
 
@@ -528,8 +528,8 @@ make-pointers-compatible : ∀ {MT} store pre refs (eq : map shape refs ≡ pre)
                            (rhp : All (reference-has-pointer store) refs) →
                          FieldsHavePointer store (name-fields pre refs rhp fields eq)
 make-pointers-compatible store pre refs eq [] rhp = []
-make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = v+ make-pointers-compatible store _ refs refl fields rhp
-make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = (make-pointer-compatible store x refs px rhp foundFw) ∷r (make-pointers-compatible store _ refs refl fields rhp)
+make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = FhpV ∷ make-pointers-compatible store _ refs refl fields rhp
+make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = FhpR (make-pointer-compatible store x refs px rhp foundFw) ∷ (make-pointers-compatible store _ refs refl fields rhp)
   where
     foundFw : FoundReference store (actual px)
     foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)

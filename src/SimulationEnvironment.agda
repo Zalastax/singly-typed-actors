@@ -143,15 +143,16 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
     actor-has-inbox : has-inbox store actor
     references-have-pointer : all-references-have-a-pointer store actor
 
+data FieldHasPointer (store : Store) : ∀ {f} → named-field-content f → Set₁ where
+  FhpV : ∀ {A} {v : A} → FieldHasPointer store {ValueType A} v
+  FhpR : ∀ {name Fw} → name comp↦ Fw ∈ store → FieldHasPointer store {ReferenceType Fw} name
+
 data FieldsHavePointer (store : Store) : ∀ {MT} → All named-field-content MT → Set₁ where
   [] : FieldsHavePointer store []
-  v+_ : ∀ {MT A} {v : A} {nfc : All named-field-content MT} →
+  _∷_ : ∀ {F p MT} {nfc : All named-field-content MT} →
+    FieldHasPointer store {F} p →
     FieldsHavePointer store nfc →
-    FieldsHavePointer store {ValueType A ∷ MT} (v ∷ nfc)
-  _∷r_ : ∀ {name Fw MT} {nfc : All named-field-content MT} →
-    name comp↦ Fw ∈ store →
-    FieldsHavePointer store nfc →
-    FieldsHavePointer store {ReferenceType Fw ∷ MT} (name ∷ nfc)
+    FieldsHavePointer store {F ∷ MT} (p ∷ nfc)
 
 -- To limit references to only those that are valid for the current store,
 -- we have to prove that name in the message points to an inbox of the same
