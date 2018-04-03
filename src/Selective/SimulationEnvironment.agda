@@ -9,7 +9,7 @@ open import Data.Nat using (ℕ ; _≟_)
 open import Data.Unit using (⊤ ; tt)
 
 open import Level using (Lift ; lift)
-open import Size using (∞)
+open import Size using (Size ; ∞)
 
 open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
@@ -77,6 +77,26 @@ record _comp↦_∈_ (n : Name) (wanted : InboxShape) (store : Store) : Set₁ w
     actual-has-pointer : n ↦ actual ∈e store
     actual-handles-wanted : wanted <: actual
 
+Cont : ∀ (i : Size) (IS : InboxShape) {A B : Set₁}
+            (pre : A → TypingContext)
+            (post : B → TypingContext) →
+            Set₂
+Cont i IS {A} {B} pre post = (x : A) → ∞ActorM i IS B (pre x) post
+
+data ContStack (i : Size) (IS : InboxShape) {A : Set₁} (pre : A → TypingContext) :
+     ∀ {B : Set₁} (post : B → TypingContext) → Set₂ where
+  []    : ContStack i IS pre pre
+  _∷_   : ∀{B C}{mid : B → TypingContext} {post : C → TypingContext}
+        → Cont i IS pre mid → ContStack i IS mid post → ContStack i IS pre post
+
+record ActorState (i : Size) (IS : InboxShape) (C : Set₁) (pre : TypingContext) (post : C → TypingContext) : Set₂ where
+  constructor _⟶_
+  field
+    {A}   : Set₁
+    {mid} : A → TypingContext
+    act   : ActorM i IS A pre mid
+    cont  : ContStack i IS mid post
+
 -- An ActorM wrapped up with all of its parameters
 -- We use this to be able to store actor monads of different types in the same list.
 -- We give each actor a name so that we can find its inbox in the store.
@@ -92,7 +112,7 @@ record Actor : Set₂ where
     pre         : TypingContext
     pre-eq-refs : (map NamedInbox.shape references) ≡ pre
     post        : A → TypingContext
-    actor-m     : ActorM ∞ inbox-shape A pre post
+    computation : ActorState ∞ inbox-shape A pre post
     name        : Name
 
 named-field-content : MessageField → Set
@@ -146,15 +166,16 @@ record ValidActor (store : Store) (actor : Actor) : Set₂ where
     actor-has-inbox : has-inbox store actor
     references-have-pointer : all-references-have-a-pointer store actor
 
+data FieldHasPointer (store : Store) : ∀ {f} → named-field-content f → Set₁ where
+  FhpV : ∀ {A} {v : A} → FieldHasPointer store {ValueType A} v
+  FhpR : ∀ {name Fw} → name comp↦ Fw ∈ store → FieldHasPointer store {ReferenceType Fw} name
+
 data FieldsHavePointer (store : Store) : ∀ {MT} → All named-field-content MT → Set₁ where
   [] : FieldsHavePointer store []
-  v+_ : ∀ {MT A} {v : A} {nfc : All named-field-content MT} →
+  _∷_ : ∀ {F p MT} {nfc : All named-field-content MT} →
+    FieldHasPointer store {F} p →
     FieldsHavePointer store nfc →
-    FieldsHavePointer store {ValueType A ∷ MT} (v ∷ nfc)
-  _∷r_ : ∀ {name Fw MT} {nfc : All named-field-content MT} →
-    name comp↦ Fw ∈ store →
-    FieldsHavePointer store nfc →
-    FieldsHavePointer store {ReferenceType Fw ∷ MT} (name ∷ nfc)
+    FieldsHavePointer store {F ∷ MT} (p ∷ nfc)
 
 -- To limit references to only those that are valid for the current store,
 -- we have to prove that name in the message points to an inbox of the same
@@ -229,7 +250,7 @@ singleton-env {IS} {A} {post} actor = record
                                   ; pre = []
                                   ; pre-eq-refs = refl
                                   ; post = post
-                                  ; actor-m = actor
+                                  ; computation = record { act = actor ; cont = [] }
                                   ; name = 0
                                   } ∷ []
                        ; blocked = []

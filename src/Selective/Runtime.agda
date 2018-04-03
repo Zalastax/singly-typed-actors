@@ -37,8 +37,7 @@ showNames (x ∷ x₁ ∷ names) = show x ++ ", " ++ showNames (x₁ ∷ names)
 -- Creates a nicely formatted string out of a step-trace from the simulation
 show-trace : Trace → String
 show-trace (Return name) = show name ++ " returned"
-show-trace (Bind trace) = "Bind [ " ++ show-trace trace ++ " ]"
-show-trace (BindDouble name) = "Bind " ++ (show name)
+show-trace (Bind name) = "Bind [ " ++ show name ++ " ]"
 show-trace (Spawn spawner spawned) = (show spawner) ++ " spawned " ++ (show spawned)
 show-trace (Send sender receiver references) = (show sender) ++ " sent a message to " ++ (show receiver) ++ " forwarding [" ++ showNames references ++ "]"
 show-trace (Receive name Nothing) = (show name) ++ " received nothing. It was put in the blocked list"

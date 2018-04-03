@@ -35,14 +35,17 @@ new-actor {IS} {A} {post} m name = record
                                         ; pre = []
                                         ; pre-eq-refs = refl
                                         ; post = post
-                                        ; actor-m = m
+                                        ; computation = m ⟶ []
                                         ; name = name
                                         }
 
+
 -- An actor can be lifted to run sub-programs that need less references
-lift-actor : (actor : Actor) → {pre : TypingContext} → (references : Store) →
-              (pre-eq-refs : (map shape references) ≡ pre) →
-              ActorM ∞ (inbox-shape actor) (A actor) pre (post actor) → Actor
+lift-actor : (actor : Actor) → {pre : TypingContext} →
+             (references : Store) →
+             (pre-eq-refs : (map shape references) ≡ pre) →
+             ActorState ∞ (inbox-shape actor) (A actor) pre (post actor) →
+             Actor
 lift-actor actor {pre} references pre-eq-refs m = record
                                               { inbox-shape = inbox-shape actor
                                               ; A = A actor
@@ -50,13 +53,13 @@ lift-actor actor {pre} references pre-eq-refs m = record
                                               ; pre = pre
                                               ; pre-eq-refs = pre-eq-refs
                                               ; post = post actor
-                                              ; actor-m = m
+                                              ; computation = m
                                               ; name = name actor
                                               }
 
 -- Replace the monadic part of an actor
 -- Many of the bind-operations don't change anything except what the next step should be.
-replace-actorM : (actor : Actor) → ActorM ∞ (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
+replace-actorM : (actor : Actor) → ActorState ∞ (inbox-shape actor) (A actor) (pre actor) (post actor) → Actor
 replace-actorM actor m = record
                            { inbox-shape = inbox-shape actor
                            ; A = A actor
@@ -64,14 +67,15 @@ replace-actorM actor m = record
                            ; pre = pre actor
                            ; pre-eq-refs = pre-eq-refs actor
                            ; post = post actor
-                           ; actor-m = m
+                           ; computation = m
                            ; name = name actor
                            }
+
 
 -- Add one reference to an actor.
 -- Used when receiving a reference, spawn, or self.
 -- The precondition and references are equal via the congruence relation on consing the shape of the reference.
-add-reference : (actor : Actor) → (nm : NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
+add-reference : (actor : Actor) → (nm : NamedInbox) → ActorState ∞ (inbox-shape actor) (A actor) (shape nm ∷ pre actor) (post actor) → Actor
 add-reference actor nm m = record
                              { inbox-shape = inbox-shape actor
                              ; A = A actor
@@ -79,11 +83,11 @@ add-reference actor nm m = record
                              ; pre = shape nm ∷ pre actor
                              ; pre-eq-refs = cong (_∷_ (shape nm)) (pre-eq-refs actor)
                              ; post = post actor
-                             ; actor-m = m
+                             ; computation = m
                              ; name = name actor
                              }
 
-add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorM ∞ (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
+add-references-to-actor : (actor : Actor) → (nms : List NamedInbox) → ActorState ∞ (inbox-shape actor) (A actor) ((map shape nms) ++ pre actor) (post actor) → Actor
 add-references-to-actor actor nms m = record
                                         { inbox-shape = inbox-shape actor
                                         ; A = A actor
@@ -91,13 +95,13 @@ add-references-to-actor actor nms m = record
                                         ; pre = map shape nms ++ pre actor
                                         ; pre-eq-refs = trans (map-++-commute shape nms (references actor)) (cong (_++_ (map shape nms)) (pre-eq-refs actor))
                                         ; post = post actor
-                                        ; actor-m = m
+                                        ; computation = m
                                         ; name = name actor
                                         }
 
 add-references-rewrite : (actor : Actor) → (nms : List NamedInbox) → {x : Message (inbox-shape actor)} →
   map shape nms ++ pre actor ≡ add-references (pre actor) x →
-  ActorM ∞ (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) →
+  ActorState ∞ (inbox-shape actor) (A actor) (add-references (pre actor) x) (post actor) →
   Actor
 add-references-rewrite actor nms {x} p m = record
                              { inbox-shape = inbox-shape actor
@@ -106,7 +110,7 @@ add-references-rewrite actor nms {x} p m = record
                              ; pre = add-references (pre actor) x
                              ; pre-eq-refs = trans (trans (map-++-commute shape nms (references actor)) (cong (_++_ (map shape nms)) (pre-eq-refs actor))) p
                              ; post = post actor
-                             ; actor-m = m
+                             ; computation = m
                              ; name = name actor
                              }
 
@@ -247,27 +251,27 @@ messages-valid-suc {store} {IS} {n} {x} {nx ∷ _} frsh (px ∷ vi) = message-va
 
 -- Add a new actor to the environment.
 -- The actor is added to the top of the list of actors.
-add-top : ∀ {IS A post} → ActorM ∞ IS A [] post → Env → Env
-add-top {IS} {A} {post} actor-m env = record
-                                 { acts = record
-                                            { inbox-shape = IS
-                                            ; A = A
-                                            ; references = []
-                                            ; pre = []
-                                            ; pre-eq-refs = refl
-                                            ; post = post
-                                            ; actor-m = actor-m
-                                            ; name = fresh-name env
-                                            } ∷ acts env
-                                 ; blocked = blocked env
-                                 ; env-inboxes = [] ∷ env-inboxes env
-                                 ; store = inbox# fresh-name env [ IS ] ∷ store env
-                                 ; fresh-name = suc (fresh-name env)
-                                 ; actors-valid = record { actor-has-inbox = zero ; references-have-pointer = [] } ∷ ∀map (valid-actor-suc (name-is-fresh env)) (actors-valid env)
-                                 ; blocked-valid = ∀map (valid-actor-suc (name-is-fresh env)) (blocked-valid env)
-                                 ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (name-is-fresh env)
-                                 ; name-is-fresh = Data.Nat.s≤s (≤-reflexive refl) ∷ ∀map  Data.Nat.Properties.≤-step (name-is-fresh env)
-                                 }
+add-top : ∀ {IS A post} → ActorState ∞ IS A [] post → Env → Env
+add-top {IS} {A} {post} m env = record
+                 { acts = record
+                        { inbox-shape = IS
+                        ; A = A
+                        ; references = []
+                        ; pre = []
+                        ; pre-eq-refs = refl
+                        ; post = post
+                        ; computation = m
+                        ; name = fresh-name env
+                        } ∷ acts env
+                   ; blocked = blocked env
+                   ; env-inboxes = [] ∷ env-inboxes env
+                   ; store = inbox# fresh-name env [ IS ] ∷ store env
+                   ; fresh-name = suc (fresh-name env)
+                   ; actors-valid = record { actor-has-inbox = zero ; references-have-pointer = [] } ∷ ∀map (valid-actor-suc (name-is-fresh env)) (actors-valid env)
+                   ; blocked-valid = ∀map (valid-actor-suc (name-is-fresh env)) (blocked-valid env)
+                   ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (name-is-fresh env)
+                   ; name-is-fresh = Data.Nat.s≤s (≤-reflexive refl) ∷ ∀map  Data.Nat.Properties.≤-step (name-is-fresh env)
+                   }
   where
     map-suc : (store : Store) → {store' : Store} → {inbs : Inboxes store'} → InboxesValid store inbs → ∀ {n} → (NameFresh store n) → InboxesValid (inbox# n [ IS ] ∷ store) inbs
     map-suc store [] frsh = []
