@@ -375,14 +375,13 @@ and we can see that bind preserves the size (observation depth) $i$.
 Agda implements a sort of subtyping for sizes,
 so computations of different sizes can still be composed via bind.
 
-We don't give the constructors \AgdaRef[ActorMonad]{Return} and \AgdaRef[ActorMonad]{_∞>>=_}
+We don't give the constructors \AgdaRef[ActorMonad]{Return} and \AgdaInductiveConstructor{∞>>=}
 the names return and >>=,
 since we want those names to refer to the type \AgdaRef[ActorMonad]{∞ActorM}.
 Instead, the actual return and >>= are defined as a separate functions
-that wrap \AgdaRef[ActorMonad]{Return} and \AgdaRef[ActorMonad]{_∞>>=_}.
+that wrap \AgdaRef[ActorMonad]{Return} and \AgdaInductiveConstructor{∞>>=}.
 
 \AgdaTarget{Return}
-\AgdaTarget{_∞>>=_}
 \begin{code}
   Return : ∀ {A post} → (val : A) → ActorM i IS A (post val) post
   _∞>>=_ : ∀ {A B pre mid post} → (m : ∞ActorM i IS A pre mid) →

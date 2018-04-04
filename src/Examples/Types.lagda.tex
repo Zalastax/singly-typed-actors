@@ -16,8 +16,10 @@ open import ActorMonad
 data _≡_ {a} {A : Set a} (x : A) : A → Set a where
   refl : x ≡ x
 
-trivial = 4 ≡ 4
-definitional = (2 + 2) ≡ 4
+trivial : 4 ≡ 4
+trivial = refl
+definitional : (2 + 2) ≡ 4
+definitional = refl
 \end{code}
 %</PropositionalEquality>
 
