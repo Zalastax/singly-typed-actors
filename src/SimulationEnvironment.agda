@@ -5,11 +5,12 @@ open import ActorMonad
 open import Data.List using (List ; _∷_ ; [] ; map)
 open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀map)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
-open import Data.Nat using (ℕ ; _≟_)
+open import Data.Nat using (ℕ ; _≟_ ; _<_ ; zero ; suc ; s≤s)
+open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Unit using (⊤ ; tt)
 
 open import Level using (Lift ; lift)
-open import Size using (Size ; ∞)
+open import Size using (Size ; Size<_ ; ↑_ ; ∞)
 
 open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
@@ -199,6 +200,72 @@ NameFresh : Store → ℕ → Set₁
 NameFresh store n = All (λ v → name v Data.Nat.< n) store
   where open NamedInbox
 
+
+-- convert < to ¬≡
+<-¬≡ : ∀ {n m} → n < m → n ¬≡ m
+<-¬≡ {zero} {zero} ()
+<-¬≡ {zero} {suc m} p = _
+<-¬≡ {suc n} {zero} ()
+<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) with (<-¬≡ p)
+... | q with (n ≟ m)
+<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) | () | yes p₁
+<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) | q | no ¬p = _
+
+-- If a name is fresh for a store (i.e. all names in the store are < than the name),
+-- then none of the names in the store is equal to the name
+Fresh¬≡ : ∀ {store name } → NameFresh store name → (All (λ m → (NamedInbox.name m) ¬≡ name) store)
+Fresh¬≡ ls = ∀map (λ frsh → <-¬≡ frsh) ls
+
+record NameSupply (store : Store) : Set₁ where
+  field
+    name : Name
+    freshness-carrier : All (λ v → NamedInbox.name v < name) store
+    name-is-fresh : {n : Name} {IS : InboxShape} → n ↦ IS ∈e store → ¬[ n ≟ name ]
+
+open NameSupply
+
+record NameSupplyStream (i : Size) (store : Store) : Set₁ where
+  coinductive
+  field
+    supply : NameSupply store
+    next : (IS : InboxShape) → {j : Size< i} → NameSupplyStream j (inbox# supply .name [ IS ] ∷ store)
+
+
+-- helps show that all the names in the store are still valid if we add a new name on top,
+-- if the new name is > than all the names already in the store.
+suc-helper : ∀ {store name IS n} →
+             name ↦ IS ∈e store →
+             All (λ v → suc (NamedInbox.name v) Data.Nat.≤ n) store →
+             ¬[ name ≟ n ]
+suc-helper zero (px ∷ p) = <-¬≡ px
+suc-helper (suc q) (px ∷ p) = suc-helper q p
+
+suc-p : ∀ {store name n x shape} → ¬[ name ≟ n ] → name comp↦ shape ∈ store → name comp↦ shape ∈ (inbox# n [ x ] ∷ store)
+suc-p pr [p: actual-has-pointer ][handles: actual-handles-wanted ] = [p: (suc {pr = pr} actual-has-pointer) ][handles: actual-handles-wanted ]
+
+open NameSupplyStream
+
+next-name-supply : {store : Store} → (ns : NameSupply store) → (IS : InboxShape) → NameSupply (inbox# (ns .name) [ IS ] ∷ store)
+next-name-supply ns IS = record {
+  name = suc (ns .name)
+  ; freshness-carrier = next-fresh
+  ; name-is-fresh = λ p → suc-helper p next-fresh
+  }
+  where
+    next-fresh = (s≤s (≤-reflexive refl)) ∷ ∀map ≤-step (ns .freshness-carrier)
+
+name-supply-singleton : {i : Size} → NameSupplyStream i []
+name-supply-singleton .supply = record {
+  name = 0
+  ; freshness-carrier = []
+  ; name-is-fresh = λ { () }
+  }
+name-supply-singleton .next = stream-builder (name-supply-singleton .supply)
+  where
+    stream-builder : {i : Size} → {store : Store} → (ns : NameSupply store) → (IS : InboxShape) → {j : Size< i} → NameSupplyStream j (inbox# (ns .name) [ IS ] ∷ store)
+    stream-builder ns IS .supply = next-name-supply ns IS
+    stream-builder ns IS .next = stream-builder (next-name-supply ns IS)
+
 -- The environment is a list of actors and inboxes,
 -- with a proof that every ector is valid in the context of said list of inboxes
 record Env : Set₂ where
@@ -217,10 +284,7 @@ record Env : Set₂ where
     actors-valid : All (ValidActor store) acts
     blocked-valid : All (ValidActor store) blocked
     messages-valid : InboxesValid store env-inboxes
-    -- In each environment we keep track of the next fresh name,
-    -- and a proof that the name is not already used in the store.
-    fresh-name : Name
-    name-is-fresh : NameFresh store fresh-name
+    name-supply : NameSupplyStream ∞ store
 
 -- The empty environment
 empty-env : Env
@@ -229,11 +293,10 @@ empty-env = record
              ; blocked = []
              ; env-inboxes = []
              ; store = []
-             ; fresh-name = 0
              ; actors-valid = []
              ; blocked-valid = []
              ; messages-valid = []
-             ; name-is-fresh = []
+             ; name-supply = name-supply-singleton
              }
 
 -- An environment containing a single actor.
@@ -248,14 +311,13 @@ singleton-env {IS} {A} {post} actor = record
                                   ; pre-eq-refs = refl
                                   ; post = post
                                   ; computation = record { act = actor ; cont = [] }
-                                  ; name = 0
+                                  ; name = name-supply-singleton .supply .name
                                   } ∷ []
                        ; blocked = []
                        ; env-inboxes = [] ∷ []
                        ; store = inbox# 0 [ IS ] ∷ []
-                       ; fresh-name = 1
                        ; actors-valid = (record { actor-has-inbox = zero ; references-have-pointer = [] }) ∷ []
                        ; blocked-valid = []
                        ; messages-valid = [] ∷ []
-                       ; name-is-fresh = Data.Nat.s≤s Data.Nat.z≤n ∷ []
+                       ; name-supply = name-supply-singleton .next IS
                        }

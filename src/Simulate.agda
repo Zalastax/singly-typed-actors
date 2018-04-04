@@ -52,6 +52,8 @@ open ValidMessageList
 open NamedInbox
 open _comp↦_∈_
 open ∞Colist
+open NameSupply
+open NameSupplyStream
 
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.
@@ -82,25 +84,23 @@ simulate env | actor ∷ rest | valid ∷ restValid | (m ∞>>= f) ⟶ cont = ke
              env
              (actor' ∷ rest)
              (rewrap-valid-actor valid refl refl refl ∷ restValid)
-simulate env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ cont = keep-simulating (Spawn (name actor) (fresh-name env)) env'
+simulate env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ cont = keep-simulating (Spawn (name actor) (env .name-supply .supply .name)) env'
   where
     newStoreEntry : NamedInbox
-    newStoreEntry = inbox# (fresh-name env) [ NewIS ]
+    newStoreEntry = inbox# (env .name-supply .supply .name) [ NewIS ]
     newStore : Store
     newStore = newStoreEntry ∷ store env
     newAct : Actor
-    newAct = new-actor act (fresh-name env)
+    newAct = new-actor act (env .name-supply .supply .name)
     newActValid : ValidActor newStore newAct
     newActValid = record { actor-has-inbox = zero ; references-have-pointer = [] }
-    newIsFresh : NameFresh newStore (suc (fresh-name env))
-    newIsFresh = s≤s (≤-reflexive refl) ∷ ∀map ≤-step (name-is-fresh env)
     actor' : Actor
     actor' = add-reference actor newStoreEntry (Return _ ⟶ cont)
     valid' : ValidActor newStore actor'
     valid' = record {
-      actor-has-inbox = suc {pr = suc-helper (actor-has-inbox valid) (name-is-fresh env)} (actor-has-inbox valid)
+      actor-has-inbox = suc {pr = env .name-supply .supply .name-is-fresh (actor-has-inbox valid)} (actor-has-inbox valid)
       ; references-have-pointer = [p: zero ][handles: ⊆-refl ] ∷ ∀map
-                                      (λ p → suc-p (suc-helper (actual-has-pointer p) (name-is-fresh env)) p)
+                                      (λ p → suc-p (env .name-supply .supply .name-is-fresh (actual-has-pointer p)) p)
                                       (references-have-pointer valid) }
     env' : Env
     env' = record
@@ -108,16 +108,15 @@ simulate env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ 
              ; blocked = blocked env
              ; store = newStore
              ; env-inboxes = [] ∷ env-inboxes env
-             ; actors-valid = newActValid ∷ valid' ∷ ∀map (valid-actor-suc (name-is-fresh env)) restValid
-             ; blocked-valid = ∀map (valid-actor-suc (name-is-fresh env)) (blocked-valid env)
-             ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (name-is-fresh env)
-             ; fresh-name = suc (fresh-name env)
-             ; name-is-fresh = newIsFresh
+             ; actors-valid = newActValid ∷ valid' ∷ ∀map (valid-actor-suc (env .name-supply .supply)) restValid
+             ; blocked-valid = ∀map (valid-actor-suc (env .name-supply .supply)) (blocked-valid env)
+             ; messages-valid = [] ∷ map-suc (store env) (messages-valid env) (env .name-supply .supply)
+             ; name-supply = env .name-supply .next NewIS
              }
          where
-           map-suc : (store : Store) → {store' : Store} {inbs : Inboxes store'} → InboxesValid store inbs → ∀ {n} → NameFresh store n → InboxesValid (inbox# n [ NewIS ] ∷ store) inbs
-           map-suc store [] frsh = []
-           map-suc store (x ∷ valid) frsh = messages-valid-suc frsh x ∷ map-suc store valid frsh
+           map-suc : (store : Store) → {store' : Store} {inbs : Inboxes store'} → InboxesValid store inbs → (ns : NameSupply store) → InboxesValid (inbox# ns .name [ NewIS ] ∷ store) inbs
+           map-suc store [] ns = []
+           map-suc store (x ∷ valid) ns = messages-valid-suc ns x ∷ map-suc store valid ns
 simulate env | actor ∷ rest | valid ∷ restValid | Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont =
   keep-simulating (Send (name actor) (name foundTo) (reference-names namedFields)) withUnblocked
   where
@@ -186,8 +185,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | Receive ⟶ cont = keep-si
                                                ∷ restValid
                                              ; blocked-valid = blocked-valid env
                                              ; messages-valid = inboxes-valid inboxesAfter
-                                             ; fresh-name = fresh-name env
-                                             ; name-is-fresh = name-is-fresh env
+                                             ; name-supply = env .name-supply
                                              }
 simulate env | actor ∷ rest | valid ∷ restValid | Self ⟶ cont = keep-simulating (Self (name actor)) env'
   where
