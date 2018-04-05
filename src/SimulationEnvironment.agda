@@ -286,6 +286,14 @@ record Env : Set₂ where
     messages-valid : InboxesValid store env-inboxes
     name-supply : NameSupplyStream ∞ store
 
+
+data Focus {IS : InboxShape} {A : Set₁} {pre : TypingContext} {mid : A → TypingContext} {C : Set₁} {post : C → TypingContext}
+        {cont : ContStack ∞ IS mid post} (act : ActorM ∞ IS A pre mid) : Env → Set₂ where
+  Foc : {rest : List Actor} {bl : List Actor} {str : Store} {inbs : Inboxes str} {rv : All (ValidActor str) rest} {bv : All (ValidActor str) bl}
+        {mv : InboxesValid str inbs} {ns : NameSupplyStream ∞ str} {refs : List NamedInbox} {per : (map NamedInbox.shape refs) ≡ pre} {nm : Name} →
+        (va : ValidActor str (record { inbox-shape = IS ; A = C ; references = refs ; pre = pre ; pre-eq-refs = per ; post = post ; computation = act ⟶ cont ; name = nm })) →
+        Focus act (record {acts = _ ∷ rest ; blocked = bl ; store = str ; env-inboxes = inbs ; actors-valid = va ∷ rv ; blocked-valid = bv ; messages-valid = mv ; name-supply = ns})
+
 -- The empty environment
 empty-env : Env
 empty-env = record

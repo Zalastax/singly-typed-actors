@@ -13,8 +13,9 @@ open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_ ; s≤s)
 open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
+open import Data.Maybe using (Maybe ; just ; nothing)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans ; inspect ; [_])
 
 open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
 open import Size using (∞)
@@ -35,12 +36,10 @@ data Trace : Set where
 
 -- A step in the simulation is the next environment paired up with what step was taken
 record EnvStep : Set₂ where
+  constructor _traces_
   field
-    env : Env
     trace : Trace
-
-private
-  keep-simulating : Trace → Env → ∞Colist ∞ EnvStep
+    env : Env
 
 open Actor
 open ValidActor
@@ -55,18 +54,36 @@ open ∞Colist
 open NameSupply
 open NameSupplyStream
 
--- Simulates the actors running in parallel by making one step of one actor at a time.
--- The actor that was run is put in the back of the queue unless it became blocked.
--- A simulation can possibly be infinite, and is thus modelled as an infinite list.
---
--- The simulation function is structured by pattern matching on every constructor of ActorM
--- for the top-most actor.
-simulate : Env → ∞Colist ∞ EnvStep
-simulate env with (acts env) | (actors-valid env)
-simulate env | [] | _ = delay []
-simulate env | actor ∷ rest | _ with (computation actor)
-simulate env | actor ∷ rest | _ | Return val ⟶ [] = keep-simulating (Return (name actor)) (drop-top-actor env)
-simulate env | actor ∷ rest | valid ∷ restValid | Return val ⟶ (f ∷ cont) = keep-simulating (Return (name actor)) env'
+reduce-return-to-nothing : ∀ {IS A mid} {v : A} → (env : Env) → Focus {IS} {post = mid} {cont = []} (Return v) env → Env
+reduce-return-to-nothing env (Foc va) = drop-top-actor env
+
+reduce-return-to-f : ∀ {IS A B C mid} {v : A} {post : B → TypingContext} {post' : C → TypingContext} {f : Cont ∞ IS mid post} {cont : ContStack ∞ IS post post'} → (env : Env) → Focus {IS} {A} {mid v} {mid} {cont = f ∷ cont} (Return v) env → Env
+reduce-return-to-f {v = v} {f = f} {cont = cont} env (Foc {rest = rest} {rv = restValid} {per = per} va) = env'
+  where
+    actor' : Actor
+    actor' = replace-actorM record { inbox-shape = _ ; A = _ ; references = _ ; pre = _ ; pre-eq-refs = per ; post = _ ; computation = Return v ⟶ (f ∷ cont) ; name = _ } ((f v) .force ⟶ cont)
+    env' : Env
+    env' = replace-actors
+             env
+             (actor' ∷ rest)
+             (rewrap-valid-actor va refl refl refl ∷ restValid)
+
+reduce : Env → Maybe EnvStep
+reduce record { acts = [] } = nothing
+reduce env@(record { acts = actor@(record { computation = (Return val ⟶ [])}) ∷ rest ; actors-valid = (valid ∷ restValid)}) = just (Return (name actor) traces reduce-return-to-nothing env (Foc valid))
+reduce env@(record { acts = actor@(record { computation = (Return val ⟶ (f ∷ cont))}) ∷ rest ; actors-valid = (valid ∷ restValid)}) = just (Return (name actor) traces reduce-return-to-f env (Foc valid))
+reduce record { acts = actor@(record { computation = ((m ∞>>= f) ⟶ cont) }) ∷ rest ; actors-valid = valid ∷ restValid } = {!!}
+reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Spawn act ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
+reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Send canSendTo msg ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
+reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Receive ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
+reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Self ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
+reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Strengthen inc ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
+
+{- reduce env with (acts env) | (actors-valid env)
+reduce env | [] | _ = nothing
+reduce env | actor ∷ rest | _ with (computation actor) | inspect computation actor
+reduce env | actor ∷ rest | valid ∷ _ | Return val ⟶ [] | [ refl ] = just ((Return (name actor)) traces reduce-return-to-nothing env (Foc valid))
+reduce env | actor ∷ rest | valid ∷ restValid | Return val ⟶ (f ∷ cont) | p = just ((Return (name actor)) traces env')
   where
     actor' : Actor
     actor' = replace-actorM actor ((f val) .force ⟶ cont)
@@ -75,7 +92,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | Return val ⟶ (f ∷ cont
              env
              (actor' ∷ rest)
              (rewrap-valid-actor valid refl refl refl ∷ restValid)
-simulate env | actor ∷ rest | valid ∷ restValid | (m ∞>>= f) ⟶ cont = keep-simulating (Bind (name actor)) env'
+reduce env | actor ∷ rest | valid ∷ restValid | (m ∞>>= f) ⟶ cont | p = just ((Bind (name actor)) traces env')
   where
     actor' : Actor
     actor' = replace-actorM actor (m .force ⟶ (f ∷ cont))
@@ -84,7 +101,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | (m ∞>>= f) ⟶ cont = ke
              env
              (actor' ∷ rest)
              (rewrap-valid-actor valid refl refl refl ∷ restValid)
-simulate env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ cont = keep-simulating (Spawn (name actor) (env .name-supply .supply .name)) env'
+reduce env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ cont | p = just ((Spawn (name actor) (env .name-supply .supply .name)) traces env')
   where
     newStoreEntry : NamedInbox
     newStoreEntry = inbox# (env .name-supply .supply .name) [ NewIS ]
@@ -117,8 +134,8 @@ simulate env | actor ∷ rest | valid ∷ restValid | Spawn {NewIS} {B} act ⟶ 
            map-suc : (store : Store) → {store' : Store} {inbs : Inboxes store'} → InboxesValid store inbs → (ns : NameSupply store) → InboxesValid (inbox# ns .name [ NewIS ] ∷ store) inbs
            map-suc store [] ns = []
            map-suc store (x ∷ valid) ns = messages-valid-suc ns x ∷ map-suc store valid ns
-simulate env | actor ∷ rest | valid ∷ restValid | Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont =
-  keep-simulating (Send (name actor) (name foundTo) (reference-names namedFields)) withUnblocked
+reduce env | actor ∷ rest | valid ∷ restValid | Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont | p =
+  just ((Send (name actor) (name foundTo) (reference-names namedFields)) traces withUnblocked)
   where
     foundTo : FoundReference (store env) ToIS
     foundTo = lookup-reference-act valid canSendTo
@@ -147,7 +164,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | Send {ToIS = ToIS} canSend
                              (references-have-pointer valid)))
     withUnblocked : Env
     withUnblocked = unblock-actor withUpdatedInbox (name foundTo)
-simulate env | actor ∷ rest | valid ∷ restValid | Receive ⟶ cont = keep-simulating (Receive (name actor) (receiveKind (GetInbox.messages actorsInbox))) (env' actorsInbox)
+reduce env | actor ∷ rest | valid ∷ restValid | Receive ⟶ cont | p = just ((Receive (name actor) (receiveKind (GetInbox.messages actorsInbox))) traces (env' actorsInbox))
   where
     actorsInbox : GetInbox (store env) (inbox-shape actor)
     actorsInbox = get-inbox env (actor-has-inbox valid)
@@ -187,7 +204,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | Receive ⟶ cont = keep-si
                                              ; messages-valid = inboxes-valid inboxesAfter
                                              ; name-supply = env .name-supply
                                              }
-simulate env | actor ∷ rest | valid ∷ restValid | Self ⟶ cont = keep-simulating (Self (name actor)) env'
+reduce env | actor ∷ rest | valid ∷ restValid | Self ⟶ cont | p = just ((Self (name actor)) traces env')
   where
     actor' : Actor
     actor' = add-reference actor inbox# (name actor) [ (inbox-shape actor) ] (Return _ ⟶ cont)
@@ -197,7 +214,7 @@ simulate env | actor ∷ rest | valid ∷ restValid | Self ⟶ cont = keep-simul
                   ; references-have-pointer = [p: (actor-has-inbox valid) ][handles: ⊆-refl ] ∷ references-have-pointer valid }
     env' : Env
     env' = replace-actors env (actor' ∷ rest) (valid' ∷ restValid)
-simulate env | actor ∷ rest | valid ∷ restValid | Strengthen {ys} inc ⟶ cont = keep-simulating (Strengthen (name actor)) env'
+reduce env | actor ∷ rest | valid ∷ restValid | Strengthen {ys} inc ⟶ cont | p = just ((Strengthen (name actor)) traces env')
   where
     liftedRefs = lift-references inc (references actor) (pre-eq-refs actor)
     strengthenedM : ActorM ∞ (inbox-shape actor) ⊤₁ (map shape (contained liftedRefs)) (λ _ → ys)
@@ -210,6 +227,11 @@ simulate env | actor ∷ rest | valid ∷ restValid | Strengthen {ys} inc ⟶ co
       ; references-have-pointer = All-⊆ (subset liftedRefs) (references-have-pointer valid) }
     env' : Env
     env' = replace-actors env (actor' ∷ rest) (valid' ∷ restValid)
+-}
 
-
-keep-simulating trace env .force = record { env = env ; trace = trace } ∷ simulate (top-actor-to-back env)
+simulate : Env → ∞Colist ∞ EnvStep
+simulate env .force = loop (reduce env)
+  where
+    loop : Maybe EnvStep → Colist ∞ EnvStep
+    loop (just x) = x ∷ simulate (top-actor-to-back (EnvStep.env x))
+    loop nothing = []
