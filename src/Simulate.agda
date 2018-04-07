@@ -54,11 +54,31 @@ open ∞Colist
 open NameSupply
 open NameSupplyStream
 
+record StepResult {IS : InboxShape} {A : Set₁} {pre : TypingContext} {mid : A → TypingContext} (act : ActorM ∞ IS A pre mid) : Set₂ where
+  field
+    env : Env
+    {C} : Set₁
+    {post} : C → TypingContext
+    {cont} : ContStack ∞ IS mid post
+    result : Focus {C = C} {post} {cont} act env
+
+reduce-bind2 : (env : Env) → Focus2 Bind env → Env
+reduce-bind2 env@(record { acts = actor@(record { computation = (m ∞>>= f) ⟶ cont }) ∷ rest ; actors-valid = va ∷ restValid }) (Foc2 AtBind) = env'
+  where
+    actor' : Actor
+    actor' = replace-actorM actor (m .force ⟶ (f ∷ cont))
+    env' : Env
+    env' = replace-actors
+             env
+             (actor' ∷ rest)
+             (rewrap-valid-actor va refl refl refl ∷ restValid)
+
 reduce-return-to-nothing : ∀ {IS A mid} {v : A} → (env : Env) → Focus {IS} {post = mid} {cont = []} (Return v) env → Env
 reduce-return-to-nothing env (Foc va) = drop-top-actor env
 
-reduce-return-to-f : ∀ {IS A B C mid} {v : A} {post : B → TypingContext} {post' : C → TypingContext} {f : Cont ∞ IS mid post} {cont : ContStack ∞ IS post post'} → (env : Env) → Focus {IS} {A} {mid v} {mid} {cont = f ∷ cont} (Return v) env → Env
-reduce-return-to-f {v = v} {f = f} {cont = cont} env (Foc {rest = rest} {rv = restValid} {per = per} va) = env'
+reduce-return-to-f : ∀ {IS A B C mid} {v : A} {post : B → TypingContext} {post' : C → TypingContext} {f : Cont ∞ IS mid post} {cont : ContStack ∞ IS post post'} →
+                       (env : Env) → Focus {IS} {A} {mid v} {mid} {cont = f ∷ cont} (Return v) env → (StepResult (f v .force))
+reduce-return-to-f {v = v} {f = f} {cont = cont} env (Foc {rest = rest} {rv = restValid} {per = per} va) = record { env = env' ; result = Foc (rewrap-valid-actor va refl refl refl) }
   where
     actor' : Actor
     actor' = replace-actorM record { inbox-shape = _ ; A = _ ; references = _ ; pre = _ ; pre-eq-refs = per ; post = _ ; computation = Return v ⟶ (f ∷ cont) ; name = _ } ((f v) .force ⟶ cont)
@@ -68,11 +88,35 @@ reduce-return-to-f {v = v} {f = f} {cont = cont} env (Foc {rest = rest} {rv = re
              (actor' ∷ rest)
              (rewrap-valid-actor va refl refl refl ∷ restValid)
 
+reduce-bind : ∀ {IS A B C pre mid} {m : ∞ActorM ∞ IS A pre mid}
+                {post : B → TypingContext} {f : (x : A) → ∞ActorM ∞ IS B (mid x) post}
+                {contpost : C → TypingContext} {cont : ContStack ∞ IS post contpost} →
+                (env : Env) → Focus {IS} {B} {pre} {post} {cont = cont} (m ∞>>= f) env →
+                StepResult (m .force)
+reduce-bind {m = m} {f = f} {cont = cont} env (Foc {rest = rest} {rv = restValid} {per = per} va) = record { env = env' ; result = Foc (rewrap-valid-actor va refl refl refl) }
+  where
+    actor' : Actor
+    actor' = replace-actorM (record
+                               { inbox-shape = _
+                               ; A = _
+                               ; references = _
+                               ; pre = _
+                               ; pre-eq-refs = per
+                               ; post = _
+                               ; computation = (m ∞>>= f) ⟶ cont
+                               ; name = _
+                               }) (m .force ⟶ (f ∷ cont))
+    env' : Env
+    env' = replace-actors
+             env
+             (actor' ∷ rest)
+             (rewrap-valid-actor va refl refl refl ∷ restValid)
+
 reduce : Env → Maybe EnvStep
 reduce record { acts = [] } = nothing
 reduce env@(record { acts = actor@(record { computation = (Return val ⟶ [])}) ∷ rest ; actors-valid = (valid ∷ restValid)}) = just (Return (name actor) traces reduce-return-to-nothing env (Foc valid))
-reduce env@(record { acts = actor@(record { computation = (Return val ⟶ (f ∷ cont))}) ∷ rest ; actors-valid = (valid ∷ restValid)}) = just (Return (name actor) traces reduce-return-to-f env (Foc valid))
-reduce record { acts = actor@(record { computation = ((m ∞>>= f) ⟶ cont) }) ∷ rest ; actors-valid = valid ∷ restValid } = {!!}
+reduce env@(record { acts = actor@(record { computation = (Return val ⟶ (f ∷ cont))}) ∷ rest ; actors-valid = (valid ∷ restValid)}) = just (Return (name actor) traces StepResult.env (reduce-return-to-f env (Foc valid)))
+reduce env@(record { acts = actor@(record { computation = ((m ∞>>= f) ⟶ cont) }) ∷ rest ; actors-valid = valid ∷ restValid }) = just (Bind (name actor) traces StepResult.env (reduce-bind env (Foc valid)))
 reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Spawn act ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
 reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Send canSendTo msg ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}
 reduce record { acts = (record { inbox-shape = inbox-shape ; A = A ; references = references ; pre = pre ; pre-eq-refs = pre-eq-refs ; post = post ; computation = (Receive ⟶ cont) ; name = name } ∷ acts₁) ; blocked = _ ; store = _ ; env-inboxes = _ ; actors-valid = (px ∷ actors-valid₁) ; blocked-valid = _ ; messages-valid = _ ; name-supply = _ } = {!!}

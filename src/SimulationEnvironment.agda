@@ -286,6 +286,46 @@ record Env : Set₂ where
     messages-valid : InboxesValid store env-inboxes
     name-supply : NameSupplyStream ∞ store
 
+data ActorConstructor : Set where
+  Return : ActorConstructor
+  Bind : ActorConstructor
+  Spawn : ActorConstructor
+  Send : ActorConstructor
+  Receive : ActorConstructor
+  Self : ActorConstructor
+  Strengthen : ActorConstructor
+
+data ActorAtConstructor : ActorConstructor → Actor → Set₂ where
+  AtReturn : ∀ {IS A B refs mid post name}
+               {cont : ContStack ∞ IS mid post} {v : A} {per} →
+             ActorAtConstructor Return (record
+                                          { inbox-shape = IS
+                                          ; A = B
+                                          ; references = refs
+                                          ; pre = mid v
+                                          ; pre-eq-refs = per
+                                          ; post = post
+                                          ; computation = Return v ⟶ cont
+                                          ; name = name
+                                          })
+  AtBind : ∀ {IS A B C refs pre mid name}
+             {m : ∞ActorM ∞ IS A pre mid}
+             {post : B → TypingContext}
+             {f : (x : A) →
+             ∞ActorM ∞ IS B (mid x) post}
+             {contpost : C → TypingContext}
+             {cont : ContStack ∞ IS post contpost} →
+             ∀ {per} →
+             ActorAtConstructor Bind (record
+                                        { inbox-shape = IS
+                                        ; A = C
+                                        ; references = refs
+                                        ; pre = pre
+                                        ; pre-eq-refs = per
+                                        ; post = contpost
+                                        ; computation = (m ∞>>= f) ⟶ cont
+                                        ; name = name
+                                        })
 
 data Focus {IS : InboxShape} {A : Set₁} {pre : TypingContext} {mid : A → TypingContext} {C : Set₁} {post : C → TypingContext}
         {cont : ContStack ∞ IS mid post} (act : ActorM ∞ IS A pre mid) : Env → Set₂ where
@@ -293,6 +333,26 @@ data Focus {IS : InboxShape} {A : Set₁} {pre : TypingContext} {mid : A → Typ
         {mv : InboxesValid str inbs} {ns : NameSupplyStream ∞ str} {refs : List NamedInbox} {per : (map NamedInbox.shape refs) ≡ pre} {nm : Name} →
         (va : ValidActor str (record { inbox-shape = IS ; A = C ; references = refs ; pre = pre ; pre-eq-refs = per ; post = post ; computation = act ⟶ cont ; name = nm })) →
         Focus act (record {acts = _ ∷ rest ; blocked = bl ; store = str ; env-inboxes = inbs ; actors-valid = va ∷ rv ; blocked-valid = bv ; messages-valid = mv ; name-supply = ns})
+
+
+data Focus2 (ac : ActorConstructor) : Env → Set₂ where
+  Foc2 : {rest : List Actor} {bl : List Actor} {str : Store}
+         {inbs : Inboxes str} {rv : All (ValidActor str) rest}
+         {bv : All (ValidActor str) bl}
+         {mv : InboxesValid str inbs} {ns : NameSupplyStream ∞ str}
+         {act : Actor}
+         {va : ValidActor str act} →
+         ActorAtConstructor ac act →
+         Focus2 ac (record
+                      { acts = act ∷ rest
+                      ; blocked = bl
+                      ; store = str
+                      ; env-inboxes = inbs
+                      ; actors-valid = va ∷ rv
+                      ; blocked-valid = bv
+                      ; messages-valid = mv
+                      ; name-supply = ns
+                      })
 
 -- The empty environment
 empty-env : Env
