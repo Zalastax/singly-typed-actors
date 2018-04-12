@@ -8,6 +8,7 @@ open import Data.Vec using (Vec ; [] ;  _∷_)
 open import Data.List using (List ; [] ; _∷_)
 open import Data.String using (String)
 open import ActorMonad
+open import Membership using (_⊆_ ; _∷_ ; [] ; S ; Z)
 
 \end{code}
 
@@ -53,20 +54,29 @@ data ActorRef : (InboxType : Set) → Set where
 %</ActorRef>
 
 %<*ExampleInbox>
-\AgdaTarget{TestInbox}
 \begin{code}
 TestInbox : InboxShape
-TestInbox = (ValueType Bool ∷ [])
-            ∷ ( ReferenceType (
+TestInbox = ( ReferenceType (
                     (ValueType String ∷ [])
                     ∷ (ValueType Bool ∷ [])
                     ∷ [])
                 ∷ ValueType ℕ
                 ∷ [])
+            ∷ (ValueType Bool ∷ [])
             ∷ []
 \end{code}
 %</ExampleInbox>
 
+%<*Subtyping>
+\begin{code}
+Boolbox : InboxShape
+Boolbox = (ValueType Bool ∷ [])
+          ∷ []
+
+test-subtyping : Boolbox <: TestInbox
+test-subtyping = (S Z) ∷ []
+\end{code}
+%</Subtyping>
 %<*PartialFunction>
 \begin{code}
 partial : (n : ℕ) → (n ≡ 2) → Bool
@@ -80,14 +90,14 @@ partial (suc (suc (suc n))) ()
 %<*Identity>
 \begin{code}
 identity : (A : Set) → A → A
-identity A x = x
+identity A v = v
 \end{code}
 %</Identity>
 
 %<*ImplicitIdentity>
 \begin{code}
 identity' : {A : Set} → A → A
-identity' x = x
+identity' v = v
 
 f : ℕ → ℕ
 f = identity'

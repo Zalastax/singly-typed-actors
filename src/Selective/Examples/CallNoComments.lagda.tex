@@ -1,5 +1,5 @@
 \begin{code}
-module Selective.Examples.Call where
+module Selective.Examples.CallNoComments where
 
 open import Selective.ActorMonad public
 open import Data.List using (List ; _∷_ ; [] ; _++_)
@@ -42,64 +42,25 @@ call-select : ∀ {IS IS' MtIn} →
                 MessageFilter IS
 call-select {IS} tag sub which (Msg x fs) =
   call-select-unwrap tag x fs (translate-⊆  sub which)
-\end{code}
-%<*CallSignature>
-The first parameters to \AgdaFunction{call}\ are implicit and can be inferred from how they are used.
-\AgdaBound{Γ} is the current variable typing context,
-\AgdaBound{MtTo} and \AgdaBound{MtIn} denote the optional fields of the outgoing and incoming message,
-\AgdaBound{To} is the interface of the callee's reference,
-\AgdaBound{IS} is the interface of the current actor,
-and \AgdaBound{IS'} is the interface of the reference that will be sent to the callee.
-\begin{code}
+
 call : {Γ : TypingContext} {i : Size}
        {MtTo MtIn : MessageType}
        {To IS IS' : InboxShape} →
-\end{code}
-The actor that we're calling must exist as a variable.
-\begin{code}
        (Γ ⊢ To) →
-\end{code}
-The actor that we're calling must accept a message containing the unique tag and a reference.
-There are no further constraints on the additional fields \AgdaBound{MtTo}.
-\begin{code}
        ((ValueType UniqueTag ∷ ReferenceType IS' ∷ MtTo) ∈ To) →  
-\end{code}
-The caller must supply the unique tag manually, but it would be easy to extend the actor monad
-with some state that can provide unique tags automatically.
-The caller must also supply content for all the additional fields of the message.
-\begin{code}
        (tag : UniqueTag) →
        All (send-field-content Γ) MtTo →
-\end{code}
-The reference that is sent to the callee (\AgdaBound{IS'}) must of course
-be a subtype of the current actor (\AgdaBound{IS}).
-Furthermore, the reference that we're sending must accept messages that contain the unique tag
-and the rest of the answer.
-\begin{code}
        (ISsubs : IS' <: IS) →
        (whichIn : (ValueType UniqueTag ∷ MtIn) ∈ IS') →
-\end{code}
-Finally, call creates an actor computation that returns the reply and
-where the references in the answer are added to the context.
-\begin{code}
        ∞ActorM i IS
          (SelectedMessage (call-select tag ISsubs whichIn))
          Γ (add-selected-references Γ)
-\end{code}
-%</CallSignature>
-\begin{code}
 call {Γ} {IS = IS} var toFi tag vals sub whichIn =
-\end{code}
-%<*CallComputation>
-\begin{code}
   do
      self
      S var ![t: toFi ] ((lift tag) ∷ ([ Z ]>: sub) ∷ (translate-fields vals))
      strengthen (⊆-suc ⊆-refl)
      selective-receive (call-select tag sub whichIn)
-\end{code}
-%</CallComputation>
-\begin{code}
   where
     translate-fields : ∀ {MT} →
                        All (send-field-content Γ) MT →

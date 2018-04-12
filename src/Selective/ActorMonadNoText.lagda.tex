@@ -1,5 +1,5 @@
 \begin{code}
-module Selective.ActorMonad where
+module Selective.ActorMonadNoText where
 open import Membership using (_∈_ ; _⊆_ ; ⊆-refl ; Z ; S ; find-∈)
 
 open import Data.List using (List ; [] ; _∷_ ; _++_)
@@ -67,8 +67,7 @@ MessageFilter IS = Message IS → Bool
 
 %<*SelectedMessage>
 \begin{code}
-record SelectedMessage {IS : InboxShape}
-            (f : MessageFilter IS) : Set₁ where
+record SelectedMessage {IS : InboxShape} (f : MessageFilter IS) : Set₁ where
   field
     msg : Message IS
     msg-ok : f msg ≡ true
@@ -77,11 +76,9 @@ record SelectedMessage {IS : InboxShape}
 
 %<*SelectedMessageAddReferences>
 \begin{code}
-add-selected-references : TypingContext → ∀ {IS}
-                            {filter : MessageFilter IS} →
+add-selected-references : TypingContext → ∀ {IS} {filter : MessageFilter IS} →
                             SelectedMessage filter → TypingContext
-add-selected-references Γ m =
-    add-references Γ (SelectedMessage.msg m)
+add-selected-references Γ m = add-references Γ (SelectedMessage.msg m)
 \end{code}
 %</SelectedMessageAddReferences>
 \begin{code}
@@ -92,6 +89,9 @@ add-selected-references Γ m =
 
 infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 
+\end{code}
+%<*MonadHeader>
+\begin{code}
 data ActorM (i : Size) (IS : InboxShape) : (A : Set₁) →
                 (pre : TypingContext) →
                 (post : A → TypingContext) →
@@ -104,8 +104,13 @@ record ∞ActorM (i : Size) (IS : InboxShape) (A : Set₁)
     coinductive
     constructor delay_
     field force : ∀ {j : Size< i} → ActorM j IS A pre post
-
+\end{code}
+%</MonadHeader>
+\begin{code}
 data ActorM (i : Size) (IS : InboxShape) where
+\end{code}
+%<*MonadConstructors>
+\begin{code}
     Return : ∀ {A post} → (val : A) → ActorM i IS A (post val) post
     _∞>>=_ : ∀ {A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
         (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
@@ -117,20 +122,14 @@ data ActorM (i : Size) (IS : InboxShape) where
         (canSendTo : pre ⊢ ToIS) →
         (msg : SendMessage ToIS pre) →
         ActorM i IS ⊤₁ pre (λ _ → pre)
-    Receive : ∀ {pre} → ActorM i IS (Message IS) pre (add-references pre)
-\end{code}
-%<*SelectiveReceiveConstruct>
-\AgdaTarget{SelectiveReceive}
-\begin{code}
-    SelectiveReceive : ∀ {pre} → (filter : MessageFilter IS) →
-      ActorM i IS (SelectedMessage filter) pre (add-selected-references pre)
-\end{code}
-%</SelectiveReceiveConstruct>
-\begin{code}
+    Receive : ∀ {pre} →
+        ActorM i IS (Message IS) pre (add-references pre)
     Self : ∀ {pre} → ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
     Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
         ActorM i IS ⊤₁ xs (λ _ → ys)
-
+\end{code}
+%</MonadConstructors>
+\begin{code}
 --
 -- ========== Helpers for ActorM ==========
 --
@@ -195,10 +194,6 @@ _![t:_]_ : ∀ {i IS ToIS pre MT} →
 -- coinduction helper for Receive
 receive : ∀ {i IS pre} → ∞ActorM (↑ i) IS (Message IS) pre (add-references pre)
 receive .force = Receive
-
-selective-receive : ∀ {i IS pre} → (filter : MessageFilter IS) →
-  ∞ActorM (↑ i) IS (SelectedMessage filter) pre (add-selected-references pre)
-selective-receive filter .force = SelectiveReceive filter
 
 self : ∀ {i IS pre} → ∞ActorM (↑ i) IS ⊤₁ pre (λ _ → IS ∷ pre)
 self .force = Self

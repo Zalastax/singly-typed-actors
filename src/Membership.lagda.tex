@@ -19,9 +19,16 @@ data _∈_ {a} {A : Set a} : A → (List A) → Set a where
 x∈[]-⊥ : ∀ {a} {A : Set a} {x : A} → x ∈ [] → ⊥
 x∈[]-⊥ ()
 
+\end{code}
+%<*Subset>
+\begin{code}
 data _⊆_ {a} {A : Set a} : List A → List A → Set a where
   [] : ∀ {xs} → [] ⊆ xs
   _∷_ : ∀ {x xs ys} → x ∈ ys → xs ⊆ ys → (x ∷ xs) ⊆ ys
+\end{code}
+%</Subset>
+\begin{code}
+
 
 ⊆-suc : ∀ {a} {A : Set a} {y : A} {xs ys : List A} → xs ⊆ ys → xs ⊆ (y ∷ ys)
 ⊆-suc [] = []

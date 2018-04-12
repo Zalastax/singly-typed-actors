@@ -80,7 +80,7 @@ that will be sent using that reference.
 
 Below we have created an instance of an \AgdaRef[ActorMonad]{InboxShape},
 showcasing the important concepts.
-\AgdaRef[Examples/Types]{TestInbox} is an inbox that can receive two kinds of messages:
+\AgdaFunction{TestInbox} is an inbox that can receive two kinds of messages:
 messages containing a single boolean value,
 and messages containing a special kind of reference together with a natural number.
 The reference in the second kind of message can be sent two kinds of messages as well:
@@ -109,13 +109,39 @@ Subtyping of inboxes means that given two inboxes $A$ and $B$,
 if $A <: B$, then every message in $A$ is also a valid message in $B$.
 Since we model \AgdaRef[ActorMonad]{InboxShape} as a set,
 the subtype relation can be taken to just be the subset relation.
-The drawback of using subsets is that recursive subtypes are not captured,
-but we deem it good enough for our purposes and simple to work with.
 
-\todo{Create an example of the type-pollution problem solved}
 \begin{code}
 _<:_ = _⊆_ {A = MessageType}
 \end{code}
+
+Our representation of subsets uses two datastructures: \AgdaDatatype{∈} and \AgdaDatatype{⊆}.
+\AgdaDatatype{∈} is the list or set membership relation,
+which we model as a Peano number that tells at what position the element occurs in the list.
+An element that appears at the head of a list is at index \AgdaInductiveConstructor{Z},
+and an element that appears somewhere in the tail of the list is
+reached by succeeding (\AgdaInductiveConstructor{S}) into the tail of the list.
+
+\AgdaCatch{Membership}{ElementIn}
+
+The subset relation \AgdaBound{A} \AgdaDatatype{⊆} \AgdaBound{B} holds if
+every member of \AgdaBound{A} is also a member of \AgdaBound{B}.
+This can be modelled as a function from indices of \AgdaBound{A} to indices of \AgdaBound{B},
+but this turned out to be inconvenient for our purposes.
+An alternative approach is to build subsets as a \emph{view} \parencite{DBLP:journals/jfp/McBrideM04, norell2008dependently}
+of the lists in question.
+A view is a datatype that reveals something interesting about its indices, \eg that a list is a subset of another.
+To define \AgdaDatatype{⊆} we state that the empty list (\AgdaInductiveConstructor{[]}) is a subset of all lists,
+and we state that to you can add an element to a subset (\AgdaInductiveConstructor{∷}) if you
+are able to prove that the element is a member of the other set.
+
+\AgdaCatch{Membership}{Subset}
+
+The drawback of using subsets is that recursive subtypes are not captured,
+but we deem it good enough for our purposes and simple to work with.
+Proving that \AgdaBound{A} \AgdaFunction{<:} \AgdaBound{B} boils down to
+providing an index into \AgdaBound{B} for every element in \AgdaBound{A}.
+
+\AgdaCatch{Examples/Types}{Subtyping}
 %</InboxShapeSubtype>
 
 %<*ActorPrecondition>
@@ -151,9 +177,9 @@ References, on the other hand, are treated as variables that are maintained expl
 Maintaining the references manually in the model is enough for guaranteeing that references
 are valid, type correct, and unforgeable.
 
-We type check references just how one would type check variables in any lambda calculus,
-\ie by maintaining a variable typing context.
-This is commonly done by associating unique variable names to types.
+We type check references in the standard way of maintaining a variable typing context.
+A typing context associates variables to types,
+where variables are commonly referred to by their name.
 Variable names makes expressions easy to understand for humans,
 but pose two annoying problems: α-renaming and α-equivalence.
 α-equivalence is a form of equivalence that captures the intuition that the particular choice of
@@ -185,8 +211,8 @@ $ λ\ x → λ\ y → λ\ z → x\ z\ (y\ z) $ & $ λ\ λ\ λ\ 3\ 1\ (2\ 1) $ \\
 \end{table}
 
 What makes de Bruijn indices easy to work with in Agda is that it lets us manage
-the variable typing context as a list of types, with variables / de Bruijn indices being
-indices into that list.
+the variable typing context as a list of types, with variables as
+(de Bruijn) indices into that list.
 We choose to represent the indices as the membership proposition
 in order to make the de Bruijn indices correct by construction.
 This let's us define the type judgement $Γ ⊢ T$ as:
@@ -332,20 +358,19 @@ capturing preconditions and postconditions in the type.
 
 Actors are potentially infinite processes, making it suitable to model \ourlang using coinduction.
 Following the lead of \textcite{DBLP:journals/corr/AbelC14},
-we represent the monad \AgdaRef[ActorMonad]{ActorM} as a mutual definition of an inductive
+we represent the monad \AgdaDatatype{ActorM} as a mutual definition of an inductive
 datatype and a coinductive record.
 The record \AgdaRef[ActorMonad]{∞ActorM} is a coalgebra that one interacts with by using its
 single observation (copattern) \AgdaRef[ActorMonad]{force}.
-\AgdaRef[ActorMonad]{force} gives us an element of the \AgdaRef[ActorMonad]{ActorM} datatype
+\AgdaRef[ActorMonad]{force} gives us an element of the \AgdaDatatype{ActorM} datatype
 on which we can pattern match to see which computation to perform next.
 
-Both \AgdaRef[ActorMonad]{ActorM} and \AgdaRef[ActorMonad]{∞ActorM} are indexed by a size $i$.
+Both \AgdaDatatype{ActorM} and \AgdaRef[ActorMonad]{∞ActorM} are indexed by a size $i$.
 The size is a lower bound on on the number of times we can iteratively \AgdaRef[ActorMonad]{force}
 the computation,
 but should primarily be seen as a means to establish productivity of recursive definitions.
 When we actually simulate running actors,
-we only care for \AgdaRef[ActorMonad]{ActorM} \AgdaPostulate{∞} \AgdaDatatype{A}
-of infinite depth.
+we only care for \AgdaDatatype{ActorM} \AgdaPostulate{∞} \AgdaDatatype{A} of infinite depth.
 
 \AgdaTarget{ActorM}
 \AgdaTarget{∞ActorM}
@@ -436,7 +461,7 @@ actors to be implemented as non-parameterized monads.
 A key concept in Erlang-style actors is that actors can easily get a reference to themselves.
 For example, in order to implement callbacks the initiating actor must include a reference
 to themselves for the corresponding actor to reply to.
-In \AgdaRef[ActorMonad]{ActorM}, this need is fulfilled by the \AgdaRef[ActorMonad]{Self} construct,
+In \AgdaDatatype{ActorM}, this need is fulfilled by the \AgdaRef[ActorMonad]{Self} construct,
 which adds a reference to the actor itself to the variable context.
 \AgdaTarget{Self}
 \begin{code}
