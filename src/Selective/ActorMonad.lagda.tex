@@ -86,7 +86,7 @@ add-selected-references Γ m =
 %</SelectedMessageAddReferences>
 \begin{code}
 
-    
+
 ⊤₁ : Set₁
 ⊤₁ = Lift ⊤
 
@@ -206,6 +206,9 @@ self .force = Self
 -- coinduction helper for Strengthen
 strengthen : ∀ {i IS xs ys} → ys ⊆ xs → ∞ActorM (↑ i) IS ⊤₁ xs (λ _ → ys)
 strengthen inc .force = Strengthen inc
+
+begin : ∀ {i IS A pre post} → ∞ActorM i IS A pre post → ActorM i IS A pre post
+begin = _∞>>_ (return tt)
 
 ⊠-of-values : List Set → InboxShape
 ⊠-of-values [] = []

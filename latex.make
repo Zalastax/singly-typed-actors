@@ -9,8 +9,6 @@ generated   :=  $(wildcard $(out-subdirs:%=%*.tex))
 
 $(moved): $(LATEX-OUTPUT-DIR)%.tex: src/%.lagda.tex
 	stack exec agda -- --latex-dir=$(LATEX-OUTPUT-DIR) --latex $<
-	perl postprocess-latex.pl $@ > $(LATEX-OUTPUT-DIR)$*.processed
-	mv $(LATEX-OUTPUT-DIR)$*.processed $@
 
 .PHONY: all clean
 all: $(moved)

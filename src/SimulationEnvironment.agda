@@ -1,5 +1,5 @@
 module SimulationEnvironment where
-open import Membership using (_∈_ ; find-∈)
+open import Membership using (_∈_ ; find-∈ ; _⊆_)
 open import ActorMonad
 
 open import Data.List using (List ; _∷_ ; [] ; map)
@@ -285,6 +285,184 @@ record Env : Set₂ where
     blocked-valid : All (ValidActor store) blocked
     messages-valid : InboxesValid store env-inboxes
     name-supply : NameSupplyStream ∞ store
+
+data ActorConstructor : Set where
+  Return : ActorConstructor
+  Bind : ActorConstructor
+  Spawn : ActorConstructor
+  Send : ActorConstructor
+  Receive : ActorConstructor
+  Self : ActorConstructor
+  Strengthen : ActorConstructor
+
+data ActorAtConstructor : ActorConstructor → Actor → Set₂ where
+  AtReturn :
+    ∀ {IS A B refs mid post name}
+    {cont : ContStack ∞ IS mid post}
+    {v : A}
+    {per} →
+    ActorAtConstructor Return (record
+      { inbox-shape = IS
+      ; A = B
+      ; references = refs
+      ; pre = mid v
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Return v ⟶ cont
+      ; name = name
+      })
+  AtBind :
+    ∀ {IS A B C refs pre mid name}
+    {m : ∞ActorM ∞ IS A pre mid}
+    {post : B → TypingContext}
+    {f : (x : A) →
+    ∞ActorM ∞ IS B (mid x) post}
+    {contpost : C → TypingContext}
+    {cont : ContStack ∞ IS post contpost} →
+    ∀ {per} →
+    ActorAtConstructor Bind (record
+      { inbox-shape = IS
+      ; A = C
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = contpost
+      ; computation = (m ∞>>= f) ⟶ cont
+      ; name = name
+      })
+  AtSpawn :
+    ∀ {IS NewIS A B refs pre post postN name}
+    {m : ActorM ∞ NewIS A [] postN}
+    {cont : ContStack ∞ IS (λ _ → NewIS ∷ pre) post}
+    {per} →
+    ActorAtConstructor Spawn (record
+      { inbox-shape = IS
+      ; A = B
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Spawn m ⟶ cont
+      ; name = name
+      })
+  AtSend :
+    ∀ {IS ToIS A refs pre post name}
+    {canSendTo : pre ⊢ ToIS}
+    {msg : SendMessage ToIS pre}
+    {cont : ContStack ∞ IS (λ _ → pre) post}
+    {per} →
+    ActorAtConstructor Send (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = (Send canSendTo msg) ⟶ cont
+      ; name = name
+      })
+  AtReceive :
+    ∀ {IS A refs pre post name}
+    {cont : ContStack ∞ IS (add-references pre) post}
+    {per} →
+    ActorAtConstructor Receive (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Receive ⟶ cont
+      ; name = name
+      })
+  AtSelf :
+    ∀ {IS A refs pre post name}
+    {cont : ContStack ∞ IS (λ _ → IS ∷ pre) post}
+    {per} →
+    ActorAtConstructor Self (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Self ⟶ cont
+      ; name = name
+      })
+  AtStrengthen :
+    ∀ {IS A refs ys xs post name}
+    {inc : ys ⊆ xs}
+    {cont : ContStack ∞ IS (λ _ → ys) post}
+    {per} →
+    ActorAtConstructor Strengthen (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = xs
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = (Strengthen inc) ⟶ cont
+      ; name = name
+      })
+
+data Focus (act : Actor) : Env → Set₂ where
+  Focused :
+    {rest : List Actor}
+    {bl : List Actor}
+    {str : Store}
+    {inbs : Inboxes str}
+    {rv : All (ValidActor str) rest}
+    {bv : All (ValidActor str) bl}
+    {mv : InboxesValid str inbs}
+    {ns : NameSupplyStream ∞ str}
+    {va : ValidActor str act} →
+    Focus act (record
+      { acts = act ∷ rest
+      ; blocked = bl
+      ; store = str
+      ; env-inboxes = inbs
+      ; actors-valid = va ∷ rv
+      ; blocked-valid = bv
+      ; messages-valid = mv
+      ; name-supply = ns
+      })
+
+data ActorHasContinuation : Actor → Set₂ where
+  HasContinuation :
+    ∀ {IS A B C refs pre mid contmid post name}
+    {m : ActorM ∞ IS A pre mid}
+    {f : Cont ∞ IS {A} {B} mid contmid}
+    {cont : ContStack ∞ IS contmid post}
+    {v : A}
+    {per} →
+    ActorHasContinuation (record
+      { inbox-shape = IS
+      ; A = C
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = m ⟶ (f ∷ cont)
+      ; name = name
+      })
+
+
+data ActorHasNoContinuation : Actor → Set₂ where
+  NoContinuation :
+    ∀ {IS A refs pre post name}
+    {m : ActorM ∞ IS A pre post}
+    {v : A}
+    {per} →
+    ActorHasNoContinuation (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = m ⟶ []
+      ; name = name
+      })
 
 -- The empty environment
 empty-env : Env

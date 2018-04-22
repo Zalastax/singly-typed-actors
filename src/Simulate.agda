@@ -14,7 +14,7 @@ open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans ; inspect ; [_])
 
 open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
 open import Size using (∞)
@@ -39,8 +39,8 @@ record EnvStep : Set₂ where
     env : Env
     trace : Trace
 
-private
-  keep-simulating : Trace → Env → ∞Colist ∞ EnvStep
+-- private
+--   keep-simulating : Trace → Env → ∞Colist ∞ EnvStep
 
 open Actor
 open ValidActor
@@ -55,12 +55,241 @@ open ∞Colist
 open NameSupply
 open NameSupplyStream
 
+reduce-unbound-return : {act : Actor} → (env : Env) → Focus act env →
+                        ActorAtConstructor Return act →
+                        ActorHasNoContinuation act →
+                        Env
+reduce-unbound-return env Focused AtReturn NoContinuation = block-focused env Focused
+
+reduce-bound-return : {act : Actor} → (env : Env) → Focus act env →
+                      ActorAtConstructor Return act →
+                      ActorHasContinuation act →
+                      Env
+reduce-bound-return env@record {
+  acts = actor@record { computation = Return v ⟶ (f ∷ cont) } ∷ rest
+  ; actors-valid = actor-valid ∷ rest-valid
+  } Focused AtReturn HasContinuation = env'
+  where
+    actor' : Actor
+    actor' = replace-actorM actor ((f v .force) ⟶ cont)
+    env' : Env
+    env' = replace-focused
+             env
+             Focused
+             actor'
+             (rewrap-valid-actor AreSame actor-valid)
+
+reduce-bind : {act : Actor} → (env : Env) → Focus act env →
+              ActorAtConstructor Bind act →
+              Env
+reduce-bind env@record { acts = actor@record { computation = (m ∞>>= f) ⟶ cont } ∷ rest ; actors-valid = actor-valid ∷ rest-valid } Focused AtBind = env'
+  where
+    actor' : Actor
+    actor' = replace-actorM actor ((m .force) ⟶ (f ∷ cont))
+    env' : Env
+    env' = replace-focused
+             env
+             Focused
+             actor'
+             (rewrap-valid-actor AreSame actor-valid)
+
+reduce-spawn : {act : Actor} → (env : Env) → Focus act env →
+               ActorAtConstructor Spawn act →
+               Env
+reduce-spawn env@record {
+  acts = actor@record { computation = Spawn {NewIS} {B} act ⟶ cont } ∷ rest
+  ; actors-valid = actor-valid ∷ rest-valid
+  } Focused AtSpawn = env'''
+  where
+    new-name : Name
+    new-name = env .name-supply .supply .name
+    new-store-entry : NamedInbox
+    new-store-entry = inbox# new-name [ NewIS ]
+    env' : Env
+    env' = add-top (act ⟶ []) env
+    valid' : ValidActor (env' .store) actor
+    valid' = valid-actor-suc (env .name-supply .supply) actor-valid
+    env'' : Env
+    env'' = top-actor-to-back env'
+    actor' : Actor
+    actor' = add-reference actor new-store-entry (Return _ ⟶ cont)
+    valid'' : ValidActor (env'' .store) actor'
+    valid'' = add-reference-valid RefAdded valid' [p: zero ][handles: ⊆-refl ]
+    env''' : Env
+    env''' = replace-focused env'' Focused actor' valid''
+
+reduce-send : {act : Actor} → (env : Env) → Focus act env →
+              ActorAtConstructor Send act →
+              Env
+reduce-send env@record {
+  acts = actor@record { computation = Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont } ∷ rest
+  ; actors-valid = actor-valid ∷ rest-valid
+  } Focused AtSend = withUnblocked
+  where
+    to-reference : FoundReference (store env) ToIS
+    to-reference = lookup-reference-act actor-valid canSendTo
+    namedFields = name-fields-act (store env) actor fields actor-valid
+    actor' : Actor
+    actor' = replace-actorM actor (Return _ ⟶ cont)
+    withM : Env
+    withM = replace-focused
+              env
+              Focused
+              actor'
+              (rewrap-valid-actor AreSame actor-valid)
+    message = NamedM
+                (translate-message-pointer to-reference tag)
+                namedFields
+    message-is-valid : message-valid (env .store) message
+    message-is-valid = make-pointers-compatible
+                         (env .store)
+                         (actor .pre)
+                         (actor .references)
+                         (actor .pre-eq-refs)
+                         fields
+                         (actor-valid .references-have-pointer)
+    updater = add-message message message-is-valid
+    withUpdatedInbox : Env
+    withUpdatedInbox = update-inbox-env
+                         withM
+                         (underlying-pointer to-reference)
+                         updater
+    withUnblocked : Env
+    withUnblocked = unblock-actor withUpdatedInbox (name to-reference)
+
+
+reduce-receive-without-message : {act : Actor} → (env : Env) → Focus act env →
+                              ActorAtConstructor Receive act →
+                              ∀ inbox →
+                              InboxInState Empty inbox →
+                              ActorsInbox env act inbox →
+                              Env
+reduce-receive-without-message env Focused AtReceive _ _ _ = block-focused env Focused
+
+reduce-receive-with-message : {act : Actor} → (env : Env) → Focus act env →
+                              ActorAtConstructor Receive act →
+                              ∀ inbox →
+                              all-messages-valid (env .store) inbox →
+                              InboxInState NonEmpty inbox →
+                              ActorsInbox env act inbox →
+                              Env
+reduce-receive-with-message env@record {
+  acts = actor@record { computation = (Receive ⟶ cont) } ∷ rest
+  ; actors-valid = actor-valid ∷ rest-valid
+  } Focused AtReceive (nm ∷ messages) (nmv ∷ vms) HasMessage _ = env''
+  where
+    inboxesAfter = update-inboxes
+                     (env .store)
+                     (env .env-inboxes)
+                     (env .messages-valid)
+                     (actor-valid .actor-has-inbox)
+                     remove-message
+    env' : Env
+    env' = update-inbox-env env (actor-valid .actor-has-inbox) remove-message
+    actor' : Actor
+    actor' = add-references-rewrite
+               actor
+               (named-inboxes nm)
+               {unname-message nm}
+               (add-references++
+                 nm
+                 nmv
+                 (pre actor))
+               (Return (unname-message nm) ⟶ cont)
+    actor-valid' : ValidActor (env' .store) actor'
+    actor-valid' = record {
+      actor-has-inbox = actor-valid .actor-has-inbox
+      ; references-have-pointer = valid++ nm nmv (actor-valid .references-have-pointer)
+      }
+    env'' : Env
+    env'' = replace-focused env'
+              Focused
+              actor'
+              actor-valid'
+
+
+reduce-receive : {act : Actor} → (env : Env) → Focus act env →
+                 ActorAtConstructor Receive act →
+                 Env
+reduce-receive env@record { acts = actor ∷ rest ; actors-valid = actor-valid ∷ _ } Focused AtReceive = choose-reduction (get-inbox env (actor-valid .actor-has-inbox)) ActInb
+  where
+    open GetInbox
+    choose-reduction : (gi : GetInbox (env .store) (actor .inbox-shape)) → ActorsInbox env actor (gi .messages) → Env
+    choose-reduction record { messages = [] } p = reduce-receive-without-message env Focused AtReceive [] IsEmpty p
+    choose-reduction record { messages = inbox@(_ ∷ _) ; valid = valid } p = reduce-receive-with-message env Focused AtReceive inbox valid HasMessage p
+
+reduce-self : {act : Actor} → (env : Env) → Focus act env →
+              ActorAtConstructor Self act →
+              Env
+reduce-self env@record { acts = actor@record {
+  computation = Self ⟶ cont } ∷ _
+  ; actors-valid = actor-valid ∷ _
+  } Focused AtSelf = env'
+  where
+    actor' : Actor
+    actor' = add-reference actor inbox# (actor .name) [ (actor .inbox-shape) ] ((Return _) ⟶ cont)
+    actor-valid' : ValidActor (env .store) actor'
+    actor-valid' = add-reference-valid RefAdded actor-valid [p: (actor-valid .actor-has-inbox) ][handles: ⊆-refl ]
+    env' : Env
+    env' = replace-focused
+             env
+             Focused
+             actor'
+             actor-valid'
+
+reduce-strengthen : {act : Actor} → (env : Env) → Focus act env →
+                    ActorAtConstructor Strengthen act →
+                    Env
+reduce-strengthen env@record {
+  acts = actor@record { computation = Strengthen {ys} inc ⟶ cont } ∷ _
+  ; actors-valid = actor-valid ∷ _
+  } Focused AtStrengthen = env'
+  where
+    lifted-references = lift-references inc (references actor) (pre-eq-refs actor)
+    actor' : Actor
+    actor' = lift-actor actor (lifted-references .contained) (lifted-references .contained-eq-inboxes) (Return _ ⟶ cont)
+    actor-valid' : ValidActor (env .store) actor'
+    actor-valid' = lift-valid-actor (CanBeLifted lifted-references) actor-valid
+    env' : Env
+    env' = replace-focused
+             env
+             Focused
+             actor'
+             actor-valid'
+
+reduce : {act : Actor} → (env : Env) → Focus act env → Env
+reduce env@record { acts = record { computation = (Return val ⟶ []) } ∷ _ } Focused =
+  reduce-unbound-return env Focused AtReturn (NoContinuation {v = val})
+reduce env@record { acts = record { computation = (Return val ⟶ (_ ∷ _)) } ∷ _ } Focused =
+  reduce-bound-return env Focused AtReturn (HasContinuation {v = val})
+reduce env@record { acts = record { computation = ((m ∞>>= f) ⟶ _)} ∷ _ } Focused =
+  reduce-bind env Focused AtBind
+reduce env@record { acts = record { computation = (Spawn act ⟶ cont) } ∷ _ } Focused =
+  reduce-spawn env Focused AtSpawn
+reduce env@record { acts = record { computation = (Send canSendTo msg ⟶ cont) } ∷ _ } Focused =
+  reduce-send env Focused AtSend
+reduce env@record { acts = record { computation = (Receive ⟶ cont) } ∷ _ } Focused =
+  reduce-receive env Focused AtReceive
+reduce env@record { acts = record { computation = (Self ⟶ cont) } ∷ _ } Focused =
+  reduce-self env Focused AtSelf
+reduce env@record { acts = record { computation = (Strengthen inc ⟶ cont) } ∷ _ } Focused =
+  reduce-strengthen env Focused AtStrengthen
+
+simulate2 : Env → ∞Colist ∞ Env
+simulate2 record { acts = [] } = delay []
+simulate2 env@record { acts = _ ∷ _ ; actors-valid = _ ∷ _ } = keep-stepping (reduce env Focused)
+  where
+    keep-stepping : Env → ∞Colist ∞ Env
+    keep-stepping env .force = env ∷ simulate2 env
+
+
 -- Simulates the actors running in parallel by making one step of one actor at a time.
 -- The actor that was run is put in the back of the queue unless it became blocked.
 -- A simulation can possibly be infinite, and is thus modelled as an infinite list.
 --
 -- The simulation function is structured by pattern matching on every constructor of ActorM
 -- for the top-most actor.
+{-
 simulate : Env → ∞Colist ∞ EnvStep
 simulate env with (acts env) | (actors-valid env)
 simulate env | [] | _ = delay []
@@ -213,3 +442,4 @@ simulate env | actor ∷ rest | valid ∷ restValid | Strengthen {ys} inc ⟶ co
 
 
 keep-simulating trace env .force = record { env = env ; trace = trace } ∷ simulate (top-actor-to-back env)
+-}

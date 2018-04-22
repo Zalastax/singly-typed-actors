@@ -1,7 +1,7 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans ; find-∈)
+open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans ; find-∈ ; All-⊆)
 
 open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
@@ -49,13 +49,13 @@ lift-actor : (actor : Actor) → {pre : TypingContext} →
              Actor
 lift-actor actor {pre} references pre-eq-refs m = record
                                               { inbox-shape = inbox-shape actor
-                                              ; A = A actor
+                                              ; A = actor .A
                                               ; references = references
                                               ; pre = pre
                                               ; pre-eq-refs = pre-eq-refs
-                                              ; post = post actor
+                                              ; post = actor .post
                                               ; computation = m
-                                              ; name = name actor
+                                              ; name = actor .name
                                               }
 
 -- Replace the monadic part of an actor
@@ -114,18 +114,79 @@ add-references-rewrite actor nms {x} p m = record
                              ; name = name actor
                              }
 
+data SameValidityProof : Actor → Actor → Set₁ where
+  AreSame :
+    ∀ {A A' pre pre' post post'}
+    {IS name references}
+    {per per'}
+    {computation computation'} →
+    SameValidityProof
+    (record
+    { inbox-shape = IS
+    ; A = A
+    ; references = references
+    ; pre = pre
+    ; pre-eq-refs = per
+    ; post = post
+    ; computation = computation
+    ; name = name
+    })
+    (record
+    { inbox-shape = IS
+    ; A = A'
+    ; references = references
+    ; pre = pre'
+    ; pre-eq-refs = per'
+    ; post = post'
+    ; computation = computation'
+    ; name = name
+    })
+
 -- A proof of an actor being valid is also valid for another actor if
 -- * they have the same name
 -- * they have the same references
 -- * they have the same inbox type
 rewrap-valid-actor : {store : Store} → {actorPre : Actor} → {actorPost : Actor} →
+                     SameValidityProof actorPre actorPost →
                      ValidActor store actorPre →
-                     (name actorPre) ≡ (name actorPost) →
-                     (references actorPre) ≡ (references actorPost) →
-                     (inbox-shape actorPre) ≡ (inbox-shape actorPost) →
                      ValidActor store actorPost
-rewrap-valid-actor va refl refl refl = record { actor-has-inbox = actor-has-inbox va
-                                                         ; references-have-pointer = references-have-pointer va }
+rewrap-valid-actor AreSame va = record { actor-has-inbox = va .actor-has-inbox ; references-have-pointer = va .references-have-pointer }
+
+data ReferenceAdded (ref : NamedInbox) : Actor → Actor → Set₁ where
+  RefAdded :
+    ∀ {A A' pre pre' post post'}
+    {IS name references}
+    {per per'}
+    {computation computation'} →
+    ReferenceAdded ref
+    (record
+    { inbox-shape = IS
+    ; A = A
+    ; references = references
+    ; pre = pre
+    ; pre-eq-refs = per
+    ; post = post
+    ; computation = computation
+    ; name = name
+    })
+    (record
+    { inbox-shape = IS
+    ; A = A'
+    ; references = ref ∷ references
+    ; pre = pre'
+    ; pre-eq-refs = per'
+    ; post = post'
+    ; computation = computation'
+    ; name = name
+    })
+
+add-reference-valid : {store : Store} → {actorPre : Actor} → {actorPost : Actor} →
+                    {ref : NamedInbox} →
+                    ReferenceAdded ref actorPre actorPost →
+                    ValidActor store actorPre →
+                    reference-has-pointer store ref →
+                    ValidActor store actorPost
+add-reference-valid RefAdded va p = record { actor-has-inbox = va .actor-has-inbox ; references-have-pointer = p ∷ (va .references-have-pointer) }
 
 record ValidMessageList (store : Store) (S : InboxShape) : Set₁ where
   field
@@ -207,6 +268,13 @@ valid-actor-suc ns va = record {
     open ValidActor
     open _comp↦_∈_
 
+valid-references-suc : ∀ {store references IS} →
+                     (ns : NameSupply store) →
+                     All (reference-has-pointer store) references →
+                     All (reference-has-pointer (inbox# (ns .name) [ IS ] ∷ store)) references
+valid-references-suc ns pointers = ∀map (λ p → suc-p (ns .name-is-fresh (actual-has-pointer p)) p) pointers
+  where open _comp↦_∈_
+
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
 messages-valid-suc : ∀ {store IS x} {inb : Inbox IS} → (ns : NameSupply store) → all-messages-valid store inb → all-messages-valid (inbox# ns .name [ x ] ∷ store) inb
 messages-valid-suc {store} {IS} {x} ns [] = []
@@ -254,6 +322,13 @@ record GetInbox (store : Store) (S : InboxShape) : Set₂ where
     messages : Inbox S
     valid : all-messages-valid store messages
 
+data InboxState : Set where
+  Empty NonEmpty : InboxState
+
+data InboxInState {S : InboxShape} : InboxState → Inbox S → Set₁ where
+  IsEmpty : InboxInState Empty []
+  HasMessage : {nm : NamedMessage S} {rest : Inbox S} → InboxInState NonEmpty (nm ∷ rest)
+
 -- Get the messages of an inbox pointed to in the environment.
 -- This is just a simple lookup into the list of inboxes.
 get-inbox : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (store env) → GetInbox (store env) IS
@@ -263,6 +338,13 @@ get-inbox env point = loop (env-inboxes env) (messages-valid env) point
     loop _ [] ()
     loop (x ∷ _) (px ∷ _) zero = record { messages = x ; valid = px }
     loop (_ ∷ inbs) (_ ∷ valid) (suc point) = loop inbs valid point
+
+open GetInbox
+
+data ActorsInbox (env : Env) (actor : Actor) : Inbox (actor .inbox-shape) → Set₂ where
+  ActInb :
+    {point : (actor .name) ↦ (actor .inbox-shape) ∈e (env .store)} →
+    ActorsInbox env actor ((get-inbox env point) .messages)
 
 -- Updates an inbox in the environment
 -- Just a wrapper arround 'updateInboxes'
@@ -342,7 +424,7 @@ record LiftedReferences (lss gss : TypingContext) (references : List NamedInbox)
     subset-inbox : lss ⊆ gss
     contained : List NamedInbox
     subset : contained ⊆ references
-    contained-eq-inboxes : lss ≡ map shape contained
+    contained-eq-inboxes : map shape contained ≡ lss
 
 open LiftedReferences
 
@@ -357,9 +439,9 @@ lift-references [] refs refl = record
 lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
 ... | q  = record
                                              { subset-inbox = x₁ ∷ subs
-                                             ; contained = (lookup-parallel x₁ refs shape refl) ∷ contained q
+                                             ; contained = contained-el ∷ contained q
                                              ; subset = (translate-∈ x₁ refs shape refl) ∷ (subset q)
-                                             ; contained-eq-inboxes = combine y (shape (lookup-parallel x₁ refs shape refl)) xs (map shape (contained q)) contained-el-ok (contained-eq-inboxes q)
+                                             ; contained-eq-inboxes = combine contained-el-shape y (map shape (contained q)) xs (sym contained-el-ok) (contained-eq-inboxes q)
                                              }
   where
     contained-el : NamedInbox
@@ -370,18 +452,70 @@ lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs 
     combine : (a b : InboxShape) → (as bs : TypingContext) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
     combine a .a as .as refl refl = refl
 
+data LiftActor : Actor → Actor → Set₂ where
+  CanBeLifted :
+    ∀ {A A' post post'}
+    {IS name references}
+    {lss gss}
+    {per}
+    {computation computation'} →
+    (lr : LiftedReferences lss gss references) →
+    LiftActor
+    (record
+    { inbox-shape = IS
+    ; A = A
+    ; references = references
+    ; pre = gss
+    ; pre-eq-refs = per
+    ; post = post
+    ; computation = computation
+    ; name = name
+    })
+    (record
+    { inbox-shape = IS
+    ; A = A'
+    ; references = lr .contained
+    ; pre = lss
+    ; pre-eq-refs = lr .contained-eq-inboxes
+    ; post = post'
+    ; computation = computation'
+    ; name = name
+    })
+
+lift-valid-actor : ∀ {store} {act act' : Actor} →
+                   LiftActor act act' →
+                   ValidActor store act →
+                   ValidActor store act'
+lift-valid-actor (CanBeLifted lr) va =
+  record {
+    actor-has-inbox = va .actor-has-inbox
+      ; references-have-pointer = All-⊆ (lr .subset) (va .references-have-pointer)
+    }
+
+
+
 -- We can replace the actors in an environment if they all are valid for the current store.
 replace-actors : (env : Env) → (actors : List Actor) → All (ValidActor (store env)) actors → Env
 replace-actors env actors actorsValid = record {
   acts = actors
-  ; blocked = blocked env
-  ; env-inboxes = env-inboxes env
-  ; store = store env
+  ; blocked = env .blocked
+  ; env-inboxes = env .env-inboxes
+  ; store = env .store
   ; actors-valid = actorsValid
-  ; blocked-valid = blocked-valid env
-  ; messages-valid = messages-valid env
+  ; blocked-valid = env .blocked-valid
+  ; messages-valid = env .messages-valid
   ; name-supply = env .name-supply
   }
+
+replace-focused : {act : Actor} → (env : Env) → Focus act env →
+                  (act' : Actor) →
+                  (valid' : ValidActor (env .store) act') →
+                  Env
+replace-focused env@record {
+  acts = _ ∷ rest
+  ; actors-valid = _ ∷ rest-valid
+  } Focused act' valid' =
+  replace-actors env (act' ∷ rest) (valid' ∷ rest-valid)
 
 -- We can replace both the running and blocked actors in an environment if they all are valid for the current store.
 replace-actors+blocked : (env : Env) →
@@ -397,6 +531,19 @@ replace-actors+blocked env actors actorsValid blocked blockedValid = record {
   ; messages-valid = messages-valid env
   ; name-supply = env .name-supply
   }
+
+block-focused : {act : Actor} → (env : Env) → Focus act env → Env
+block-focused env@record {
+  acts = actor ∷ rest
+  ; blocked = blocked
+  ; actors-valid = actor-valid ∷ rest-valid
+  ; blocked-valid = blocked-valid
+  } Focused = replace-actors+blocked
+                env
+                rest
+                rest-valid
+                (actor ∷ blocked)
+                (actor-valid ∷ blocked-valid)
 
 -- Takes a named message and a proof that the named message is valid for the store.
 -- Values are valid for any store and references need a proof that the pointer is valid.
