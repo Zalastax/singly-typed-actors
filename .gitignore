@@ -18,3 +18,4 @@ MAlonzo/
 
 # Ignore our generated main file
 src/Examples/Main-generated.agda
+src/Selective/Examples/Main-generated.agda

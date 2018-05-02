@@ -2,18 +2,19 @@ module Selective.Examples.Chat where
 
 open import Selective.ActorMonad public
 open import Selective.Examples.Call using (UniqueTag ; call)
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; reverse ; _∷ʳ_)
+open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; reverse ; _∷ʳ_ ; length)
 open import Data.List.All using (All ; _∷_ ; [])
 open import Data.Bool using (Bool  ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_)
+open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_ ; pred)
 open import Data.Maybe as Maybe using (Maybe ; just ; nothing)
+open import Data.String using (String) renaming (_++_ to _||_)
 open import Size
 open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
 open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; cong)
 open import Relation.Nullary using (yes ; no)
 open import Relation.Nullary.Decidable using (⌊_⌋)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-suc)
+open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-suc ; ⊆++-refl)
 open import Data.Unit using (⊤ ; tt)
 
 open import Data.List.Properties
@@ -111,8 +112,14 @@ ClientSupervisorInterface =
 --
 --
 
+record ChatMessageContent : Set where
+  constructor chat-from_message:_
+  field
+    sender : ClientName
+    message : String
+
 ChatMessage : MessageType
-ChatMessage = ValueType ClientName ∷ ValueType String ∷ []
+ChatMessage = ValueType ChatMessageContent ∷ []
 
 LeaveRoom : MessageType
 LeaveRoom = ValueType ClientName ∷ []
@@ -192,15 +199,15 @@ room-instance = begin (loop (record { clients = [] }))
         send-loop l (x ∷ r) with (x ≟ name)
         ... | (yes _) = recurse l r x
         ... | (no _) = let p = build-pointer l (x ∷ r) Z
-          in (p ![t: Z ] ((lift name) ∷ ((lift message) ∷ []))) >> recurse l r x
+          in debug ("Sending to " || show x || ": " || message) (p ![t: Z ] (((lift (chat-from name message: message)) ∷ []))) >> recurse l r x
         recurse l r x rewrite ++-temp-fix l r x = send-loop (l ∷ʳ x) r
     handle-message : ∀ {i} → (rs : RoomState) →
                      (m : Message RoomInstanceInterface) →
                      ∞ActorM i RoomInstanceInterface RoomState (add-references (rs-to-context rs) m) rs-to-context
     -- chat message
-    handle-message rs (Msg Z (client-name ∷ message ∷ [])) = do
+    handle-message rs (Msg Z (chat-from client-name message: message ∷ [])) = do
       let open RoomState
-      (send-to-others (rs .clients) client-name message)
+      debug ("room sending " || show (pred (length (rs .clients))) ||  " messages from " || show client-name || ": " || message) (send-to-others (rs .clients) client-name message)
       (return₁ rs)
     -- leave room
     handle-message rs (Msg (S Z) (client-name ∷ [])) = do
@@ -208,7 +215,7 @@ room-instance = begin (loop (record { clients = [] }))
         open RoomState
         open RoomLeave
         rl = leave-room (rs .clients) client-name
-      (strengthen (rl .subs))
+      debug ("client#" || show client-name || " left the room") (strengthen (rl .subs))
       (return₁ (record { clients = rl .filtered }))
     -- add to room
     handle-message rs (Msg (S (S Z)) (client-name ∷ _ ∷ [])) = do
@@ -219,9 +226,9 @@ room-instance = begin (loop (record { clients = [] }))
            (rs : RoomState) →
            ∞ActorM i RoomInstanceInterface RoomState (rs-to-context rs) rs-to-context
     loop state .force = begin do
-      m ← receive
+      m ← debug ("ROOM LOOP") receive
       state' ← (handle-message state m)
-      return₁ state'
+      loop state'
 
 -- ==============
 --  ROOM MANAGER
@@ -342,6 +349,9 @@ room-supervisor = begin do
 --  CLIENT GENERAL
 -- ================
 
+busy-wait : ∀ {i IS Γ} → ℕ → ∞ActorM i IS ⊤₁ Γ (λ _ → Γ)
+busy-wait zero = return _
+busy-wait (suc n) = return tt >> busy-wait n
 
 client-get-room-manager : ∀ {i} → ∞ActorM i ClientInterface ⊤₁ [] (λ _ → RoomManagerInterface ∷ [])
 client-get-room-manager = do
@@ -406,26 +416,142 @@ client-join-room p tag room-name client-name = do
 
 client-send-message : ∀ {i  Γ} →
                       Γ ⊢ Client-to-Room →
-                      UniqueTag →
                       ClientName →
                       String →
                       ∞ActorM i ClientInterface ⊤₁ Γ (λ _ → Γ)
-client-send-message p tag client-name message = p ![t: Z ] ((lift client-name) ∷ ((lift message) ∷ []))
+client-send-message p client-name message = p ![t: Z ] ((lift (chat-from client-name message: message)) ∷ [])
+
+client-receive-message : ∀ {i Γ} →
+                         ∞ActorM i ClientInterface (Lift ChatMessageContent) Γ (λ _ → Γ)
+client-receive-message = do
+    m ← (selective-receive select-message)
+    handle-message m
+  where
+    select-message : MessageFilter ClientInterface
+    select-message (Msg (S (S (S (S (S Z))))) _) = true
+    select-message (Msg _ _) = false
+    handle-message : ∀ {i Γ} → (m : SelectedMessage select-message) →
+                     ∞ActorM i ClientInterface (Lift ChatMessageContent) (add-selected-references Γ m) (λ _ → Γ)
+    handle-message record { msg = (Msg Z _) ; msg-ok = () }
+    handle-message record { msg = (Msg (S Z) _) ; msg-ok = () }
+    handle-message record { msg = (Msg (S (S Z)) _) ; msg-ok = () }
+    handle-message record { msg = (Msg (S (S (S Z))) x₁) ; msg-ok = () }
+    handle-message record { msg = (Msg (S (S (S (S Z)))) _) ; msg-ok = () }
+    handle-message record { msg = (Msg (S (S (S (S (S Z))))) (m ∷ [])) ; msg-ok = _ } = return m
+    handle-message record { msg = (Msg (S (S (S (S (S (S ())))))) _) }
+
+client-leave-room : ∀ {i Γ} →
+                    Γ ⊢ Client-to-Room →
+                    ClientName →
+                    ∞ActorM i ClientInterface ⊤₁ Γ (λ _ → Γ)
+client-leave-room p name = p ![t: S Z ] ((lift name) ∷ [])
+
+debug-chat : {a : Level} {A : Set a} → ClientName → ChatMessageContent → A → A
+debug-chat client-name content = let open ChatMessageContent
+  in debug ("client#" || show client-name || " received \"" || content .message || "\" from client#" || show (content .sender))
+
 -- ==========
 --  CLIENT 1
 -- ==========
 
-room1 = 1
+room1-2 = 1
+room2-3 = 2
+room3-1 = 3
+room1-2-3 = 4
 name1 = 1
 
 client1 : ∀ {i} → ActorM i ClientInterface ⊤₁ [] (λ _ → [])
 client1 = begin do
   client-get-room-manager
-  _ ← (client-create-room Z 0 room1)
-  lift (JRS-SUCCESS joined-room) ← (client-join-room Z 1 room1 name1)
+  _ ← (client-create-room Z 0 room1-2)
+  _ ← (client-create-room Z 1 room3-1)
+  _ ← (client-create-room Z 2 room1-2-3)
+  lift (JRS-SUCCESS joined-room) ← (client-join-room Z 3 room3-1 name1)
     where
       (lift (JRS-FAIL failed-room)) → strengthen []
-  (client-send-message Z 2 name1 "hej hej")
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S Z) 4 room1-2 name1)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S (S Z)) 5 room1-2-3 name1)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  busy-wait 100
+  (client-send-message (S Z) name1 "hi from 1 to 2")
+  (client-send-message Z name1 "hi from 1 to 2-3")
+  let open ChatMessageContent
+  lift m1 ← client-receive-message
+  lift m2 ← debug-chat name1 m1 client-receive-message
+  lift m3 ← debug-chat name1 m2 client-receive-message
+  debug-chat name1 m3 (client-send-message Z name1 "hi1 from 1 to 2-3")
+  (client-send-message Z name1 "hi2 from 1 to 2-3")
+  (client-send-message Z name1 "hi3 from 1 to 2-3")
+  client-leave-room (S Z) name1
+  client-leave-room (Z) name1
+  (strengthen [])
+
+-- ==========
+--  CLIENT 2
+-- ==========
+
+name2 = 2
+
+client2 : ∀ {i} → ActorM i ClientInterface ⊤₁ [] (λ _ → [])
+client2 = begin do
+  client-get-room-manager
+  _ ← (client-create-room Z 0 room1-2)
+  _ ← (client-create-room Z 1 room2-3)
+  _ ← (client-create-room Z 2 room1-2-3)
+  lift (JRS-SUCCESS joined-room) ← (client-join-room Z 3 room1-2 name2)
+    where
+    (lift (JRS-FAIL failed-room)) → strengthen []
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S Z) 4 room2-3 name2)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S (S Z)) 5 room1-2-3 name2)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  busy-wait 100
+  debug "client2 send message" (client-send-message (S Z) name2 "hi from 2 to 3")
+  debug "client2 send message" (client-send-message Z name2 "hi from 2 to 1-3")
+  let open ChatMessageContent
+  lift m1 ← client-receive-message
+  lift m2 ← debug-chat name2 m1 client-receive-message
+  lift m3 ← debug-chat name2 m2 client-receive-message
+  client-leave-room (S Z) name2
+  client-leave-room (Z) name2
+  debug-chat name2 m3 (strengthen [])
+
+-- ==========
+--  CLIENT 3
+-- ==========
+
+name3 = 3
+
+client3 : ∀ {i} → ActorM i ClientInterface ⊤₁ [] (λ _ → [])
+client3 = begin do
+  client-get-room-manager
+  _ ← (client-create-room Z 0 room2-3)
+  _ ← (client-create-room Z 1 room3-1)
+  _ ← (client-create-room Z 2 room1-2-3)
+  lift (JRS-SUCCESS joined-room) ← (client-join-room Z 3 room2-3 name3)
+    where
+    (lift (JRS-FAIL failed-room)) → strengthen []
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S Z) 4 room3-1 name3)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  lift (JRS-SUCCESS joined-room) ← (client-join-room (S (S Z)) 5 room1-2-3 name3)
+    where
+      (lift (JRS-FAIL failed-room)) → strengthen []
+  busy-wait 100
+  debug "client3 send message" (client-send-message (S Z) name3 "hi from 3 to 1")
+  debug "client3 send message" (client-send-message Z name3 "hi from 3 to 1-2")
+  let open ChatMessageContent
+  lift m1 ← client-receive-message
+  lift m2 ← debug-chat name3 m1 client-receive-message
+  lift m3 ← debug-chat name3 m2 client-receive-message
+  debug-chat name3 m3 (client-leave-room Z name3)
+  client-leave-room (S Z) name3
+  client-leave-room Z name3
   (strengthen [])
 
 -- ===================
@@ -433,27 +559,43 @@ client1 = begin do
 -- ===================
 
 cs-context : TypingContext
-cs-context = RoomManagerInterface ∷ []
+cs-context = RoomManagerInterface ∷ RoomSupervisorInterface ∷ []
 
 client-supervisor : ∀ {i} → ActorM i ClientSupervisorInterface ⊤₁ [] (λ _ → cs-context)
 client-supervisor = begin do
-    get-room-manager
+    wait-for-room-supervisor
+    (get-room-manager Z 0)
     spawn-clients
   where
-    get-room-manager : ∀ {i} → ∞ActorM i ClientSupervisorInterface ⊤₁ [] (λ _ → cs-context)
-    get-room-manager = do
-      record { msg = Msg (S Z) f } ← (selective-receive (λ {
-        (Msg Z _) → false
-        ; (Msg (S Z) _) → true
-        ; (Msg (S (S ())) _)
+    wait-for-room-supervisor : ∀ {i Γ} → ∞ActorM i ClientSupervisorInterface ⊤₁ Γ (λ _ → RoomSupervisorInterface ∷ Γ)
+    wait-for-room-supervisor = do
+      record { msg = Msg Z f } ← (selective-receive (λ {
+        (Msg Z _) → true
+        ; (Msg (S _) _) → false
         }))
         where
-          record { msg = (Msg Z _) ; msg-ok = () }
+          record { msg = (Msg (S _) _) ; msg-ok = () }
+      return _
+    get-room-manager : ∀ {i Γ} →
+                     Γ ⊢ RoomSupervisorInterface →
+                     UniqueTag →
+                      ∞ActorM i ClientSupervisorInterface ⊤₁ Γ (λ _ → RoomManagerInterface ∷ Γ)
+    get-room-manager p tag = do
+      record { msg = Msg (S Z) (_ ∷  _ ∷ []) } ← (call p Z tag [] (⊆-suc ⊆-refl) Z)
+        where
+          record { msg = (Msg Z (_ ∷ _)) ; msg-ok = () }
           record { msg = (Msg (S (S ())) _) }
       return _
     spawn-clients : ∀ {i} → ∞ActorM i ClientSupervisorInterface ⊤₁ cs-context (λ _ → cs-context)
     spawn-clients = do
       (spawn client1)
+      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
+      (strengthen (⊆-suc ⊆-refl))
+      (spawn client2)
+      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
+      (strengthen (⊆-suc ⊆-refl))
+      (spawn client3)
+      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
       (strengthen (⊆-suc ⊆-refl))
 
 -- chat-supervisor is the top-most actor

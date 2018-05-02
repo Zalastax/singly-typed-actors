@@ -15,7 +15,6 @@ open import Data.List.Any using (here ; there)
 open import Relation.Binary.PropositionalEquality
             using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
 open import Membership
-            using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-trans ; ⊆-suc)
 open import Data.Unit using (⊤ ; tt)
 
 
@@ -59,94 +58,6 @@ find-split (x ∷ ls) f with (f x) | (inspect f x)
       ; tails = ls
       ; is-ls = refl
       }) eq
-
-⊆++ : {a : Level} {A : Set a}
-      (xs ys zs : List A) →
-      xs ⊆ zs → ys ⊆ zs →
-      (xs ++ ys) ⊆ zs
-⊆++ _ ys zs [] q = q
-⊆++ _ ys zs (x₁ ∷ p) q = x₁ ∷ (⊆++ _ ys zs p q)
-
-∈-insert : ∀ {a} {A : Set a}
-           (xs ys : List A) →
-           (x : A) →
-           x ∈ (ys ++ x ∷ xs)
-∈-insert xs [] x = Z
-∈-insert xs (x₁ ∷ ys) x = S (∈-insert xs ys x)
-
--- count down both the proof and the list
--- Result depends on which is shortest
-insert-one : ∀ {a} {A : Set a} {x₁ : A}
-               (xs ys : List A) →
-               (y : A) →
-               x₁ ∈ (xs ++ ys) →
-               x₁ ∈ (xs ++ y ∷ ys)
-insert-one [] ys y p = S p
-insert-one (x ∷ xs) ys y Z = Z
-insert-one (x ∷ xs) ys y (S p) = S (insert-one xs ys y p)
-
-⊆-insert : ∀ {a} {A : Set a}
-                 (xs ys zs : List A) →
-                 (x : A) →
-                 xs ⊆ (ys ++ zs) →
-                 xs ⊆ (ys ++ x ∷ zs)
-⊆-insert [] ys zs x p = []
-⊆-insert (x₁ ∷ xs) ys zs x (x₂ ∷ p) = insert-one ys zs x x₂ ∷
-                                                 (⊆-insert xs ys zs x p)
-
-⊆-move : {a : Level} {A : Set a}
-                     (xs ys : List A) →
-                     (xs ++ ys) ⊆ (ys ++ xs)
-⊆-move [] ys rewrite (++-identityʳ ys) = ⊆-refl
-⊆-move (x ∷ xs) ys with (⊆-move xs ys)
-... | q = ∈-insert xs ys x ∷ ⊆-insert (xs ++ ys) ys xs x q
-
-⊆-skip : {a : Level} {A : Set a}
-         (xs ys zs : List A) →
-         ys ⊆ zs →
-         (xs ++ ys) ⊆ (xs ++ zs)
-⊆-skip [] ys zs p = p
-⊆-skip (x ∷ xs) ys zs p = Z ∷ (⊆-suc (⊆-skip xs ys zs p))
-
-⊆++-refl : ∀ {a} {A : Set a} →
-           (xs ys : List A) →
-           xs ⊆ (xs ++ ys)
-⊆++-refl [] ys = []
-⊆++-refl (x ∷ xs) ys = Z ∷ (⊆-suc (⊆++-refl xs ys))
-
-⊆++-l-refl : ∀ {a} {A : Set a} →
-                   (xs ys : List A) →
-                   xs ⊆ (ys ++ xs)
-⊆++-l-refl xs [] = ⊆-refl
-⊆++-l-refl xs (x ∷ ys) = ⊆-suc (⊆++-l-refl xs ys)
-
-∈-inc : ∀ {a} {A : Set a}
-              (xs ys : List A) →
-              (x : A) →
-              x ∈ xs →
-              x ∈ (xs ++ ys)
-∈-inc _ ys x Z = Z
-∈-inc _ ys x (S p) = S (∈-inc _ ys x p)
-
-⊆-inc : ∀ {a} {A : Set a}
-              (xs ys zs : List A) →
-              xs ⊆ ys →
-              (xs ++ zs) ⊆ (ys ++ zs)
-⊆-inc [] [] zs p = ⊆-refl
-⊆-inc [] (x ∷ ys) zs p = ⊆++-l-refl zs (x ∷ ys)
-⊆-inc (x ∷ xs) ys zs (px ∷ p) = ∈-inc ys zs x px ∷ (⊆-inc xs ys zs p)
-
-⊆++comm : ∀ {a} {A : Set a}
-            (xs ys zs : List A) →
-            ((xs ++ ys) ++ zs) ⊆ (xs ++ (ys ++ zs))
-⊆++comm [] ys zs = ⊆-refl
-⊆++comm (x ∷ xs) ys zs = Z ∷ (⊆-suc (⊆++comm xs ys zs))
-
-⊆++comm' : ∀ {a} {A : Set a}
-           (xs ys zs : List A) →
-           (xs ++ ys ++ zs) ⊆ ((xs ++ ys) ++ zs)
-⊆++comm' [] ys zs = ⊆-refl
-⊆++comm' (x ∷ xs) ys zs = Z ∷ ⊆-suc (⊆++comm' xs ys zs)
 
 add-references++ : ∀ {IS} → (xs ys : ReferenceTypes) →
                    (x : Message IS) →
