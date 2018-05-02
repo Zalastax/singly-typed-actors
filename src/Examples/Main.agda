@@ -14,4 +14,4 @@ infinitebindEntry = singleton-env (InfiniteBind.binder .force)
 selectiveReceiveEntry = singleton-env SelectiveReceive.spawner
 callEntry = singleton-env (Call.calltestActor .force)
 
-main = IO.run (run-env trace+actors-logger pingpongEntry)
+main = IO.run (run-env pingpongEntry)
