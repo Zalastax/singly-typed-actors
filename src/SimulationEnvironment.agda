@@ -125,6 +125,14 @@ named-field-content (ReferenceType Fw) = Name
 data NamedMessage (To : InboxShape): Set₁ where
   NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
 
+unname-message : ∀ {S} → NamedMessage S → Message S
+unname-message (NamedM x fields) = Msg x (do-the-work fields)
+  where
+    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
+    do-the-work {[]} nfc = []
+    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
+    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
+
 Inbox : InboxShape → Set₁
 Inbox is = List (NamedMessage is)
 

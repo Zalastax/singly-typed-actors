@@ -624,14 +624,6 @@ unname-field : ∀ {x} → named-field-content x → receive-field-content x
 unname-field {ValueType x₁} nfc = nfc
 unname-field {ReferenceType x₁} nfc = _
 
-unname-message : ∀ {S} → NamedMessage S → Message S
-unname-message (NamedM x fields) = Msg x (do-the-work fields)
-  where
-    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
-    do-the-work {[]} nfc = []
-    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
-    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
-
 extract-inboxes : ∀ {MT} → All named-field-content MT → List NamedInbox
 extract-inboxes [] = []
 extract-inboxes (_∷_ {ValueType _} _ ps) = extract-inboxes ps
@@ -702,4 +694,3 @@ make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) r
   where
     foundFw : FoundReference store (actual px)
     foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
-

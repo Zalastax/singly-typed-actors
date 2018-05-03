@@ -50,11 +50,16 @@ run-env env = loop 1 ((simulate env) .force)
     loop n (TraceStop env _) = ♯ IO.putStrLn (show-final-step n) IO.>> ♯ IO.putStrLn (show-env env)
     loop n (x ∷ xs) = ♯ IO.putStrLn ("Step " ++ show n ) IO.>> ♯ loop (suc n) (xs .force)
 
-
-
 run-env-silent : Env → IO.IO ⊤
 run-env-silent env = loop 1 ((simulate env) .force)
   where
     loop : ℕ → Trace ∞ → IO.IO ⊤
     loop n (TraceStop env _) = IO.putStrLn (show-final-step n)
     loop n (x ∷ xs) = ♯ IO.return tt IO.>> ♯ loop (suc n) (xs .force)
+
+run-env-end : Env → IO.IO Env
+run-env-end env = loop ((simulate env) .force)
+  where
+    loop : Trace ∞ → IO.IO Env
+    loop (TraceStop env _) = IO.return env
+    loop (x ∷ xs) = ♯ IO.return x IO.>> ♯ loop (xs .force)

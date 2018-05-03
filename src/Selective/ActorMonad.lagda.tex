@@ -54,8 +54,11 @@ extract-references [] = []
 extract-references (ValueType x ∷ mt) = extract-references mt
 extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 
+add-references-static : TypingContext → MessageType → TypingContext
+add-references-static Γ MT = extract-references MT ++ Γ
+
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
-add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
+add-references Γ (Msg {MT} x x₁) = add-references-static Γ MT
 
 \end{code}
 %<*MessageFilter>
@@ -77,11 +80,17 @@ record SelectedMessage {IS : InboxShape}
 
 %<*SelectedMessageAddReferences>
 \begin{code}
+
+selected-type : ∀ {IS}
+                    {filter : MessageFilter IS} →
+                    SelectedMessage filter →
+                    MessageType
+selected-type record {msg = Msg {MT} _ _ } = MT
+
 add-selected-references : TypingContext → ∀ {IS}
                             {filter : MessageFilter IS} →
                             SelectedMessage filter → TypingContext
-add-selected-references Γ m =
-    add-references Γ (SelectedMessage.msg m)
+add-selected-references Γ m = add-references-static Γ (selected-type m)
 \end{code}
 %</SelectedMessageAddReferences>
 \begin{code}

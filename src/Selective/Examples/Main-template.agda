@@ -17,4 +17,4 @@ fibEntry = singleton-env (Fib.spawner .force)
 chatEntry = singleton-env (Chat.chat-supervisor .force)
 bookstoreEntry = singleton-env (Bookstore.bookstore-supervisor .force)
 
-main = IO.run (run-env trace+actors-logger __ENTRY__)
+main = IO.run (run-env __ENTRY__)
