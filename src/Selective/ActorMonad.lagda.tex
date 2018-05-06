@@ -57,8 +57,11 @@ extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 add-references-static : TypingContext → MessageType → TypingContext
 add-references-static Γ MT = extract-references MT ++ Γ
 
+message-type : ∀ {To} → Message To → MessageType
+message-type (Msg {MT} _ _) = MT 
+
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
-add-references Γ (Msg {MT} x x₁) = add-references-static Γ MT
+add-references Γ msg = add-references-static Γ (message-type msg)
 
 \end{code}
 %<*MessageFilter>
@@ -85,7 +88,7 @@ selected-type : ∀ {IS}
                     {filter : MessageFilter IS} →
                     SelectedMessage filter →
                     MessageType
-selected-type record {msg = Msg {MT} _ _ } = MT
+selected-type record {msg = msg } = message-type msg
 
 add-selected-references : TypingContext → ∀ {IS}
                             {filter : MessageFilter IS} →
@@ -193,13 +196,20 @@ spawn∞ : ∀ {i IS NewIS A pre postN} →
     ∞ActorM (↑ i) IS ⊤₁ pre λ _ → NewIS ∷ pre
 spawn∞ newAct = spawn (newAct .force)
 
+
+send : ∀ {i IS ToIS pre} →
+     (canSendTo : ToIS ∈ pre) →
+     (SendMessage ToIS pre) →
+     ∞ActorM (↑ i) IS ⊤₁ pre (λ _ → pre)
+send p m .force = Send p m
+
 -- coinduction helper and neater syntax for message sending
 _![t:_]_ : ∀ {i IS ToIS pre MT} →
     (canSendTo : ToIS ∈ pre) →
     (MT ∈ ToIS) →
     All (send-field-content pre) MT →
     ∞ActorM (↑ i) IS ⊤₁ pre (λ _ → pre)
-(canSendTo ![t: p ] fields) .force = Send canSendTo (SendM p fields)
+(canSendTo ![t: p ] fields) = send canSendTo (SendM p fields)
 
 -- coinduction helper for Receive
 receive : ∀ {i IS pre} → ∞ActorM (↑ i) IS (Message IS) pre (add-references pre)

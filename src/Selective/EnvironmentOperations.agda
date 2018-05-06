@@ -637,15 +637,16 @@ reference-names (_∷_ {ReferenceType x} name ps) = name ∷ reference-names ps
 ++-diff [] .[] c refl = refl
 ++-diff (x ∷ a) .(x ∷ a) c refl = refl
 
+add-fields++ : ∀ MT → (x₁ : All named-field-content MT) → map shape (extract-inboxes x₁) ≡ extract-references MT
+add-fields++ [] [] = refl
+add-fields++ (ValueType x ∷ MT) (px ∷ x₁) = add-fields++ MT x₁
+add-fields++ (ReferenceType x ∷ MT) (px ∷ x₁) = cong (_∷_ x) (add-fields++ MT x₁)
+
 add-references++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ w → map shape (named-inboxes nm) ++ w ≡ add-references w (unname-message nm)
 add-references++ msg@(NamedM {MT} x x₁) p w = halp (add-fields++ MT x₁)
   where
     halp : map shape (extract-inboxes x₁) ≡ extract-references MT → map shape (extract-inboxes x₁) ++ w ≡ extract-references MT ++ w
     halp p = ++-diff (map shape (extract-inboxes x₁)) (extract-references MT) w p
-    add-fields++ : ∀ MT → (x₁ : All named-field-content MT) → map shape (extract-inboxes x₁) ≡ extract-references MT
-    add-fields++ [] [] = refl
-    add-fields++ (ValueType x ∷ MT) (px ∷ x₁) = add-fields++ MT x₁
-    add-fields++ (ReferenceType x ∷ MT) (px ∷ x₁) = cong (_∷_ x) (add-fields++ MT x₁)
 
 valid++ : ∀ {S store} → (nm : NamedMessage S) → message-valid store nm → ∀ {w} →
         All (reference-has-pointer store) w →

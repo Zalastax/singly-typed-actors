@@ -170,5 +170,26 @@ insert-one (x ∷ xs) ys y (S p) = S (insert-one xs ys y p)
 ⊆++comm' [] ys zs = ⊆-refl
 ⊆++comm' (x ∷ xs) ys zs = Z ∷ ⊆-suc (⊆++comm' xs ys zs)
 
+pad-pointer : ∀ {a} {A : Set a} → (l r : List A) → {v : A} → v ∈ r → v ∈ (l ++ r)
+pad-pointer [] r p = p
+pad-pointer (x ∷ l) r p = S (pad-pointer l r p)
+
+record ElemInList {a} {A : Set a} (ls : List A) : Set a where
+  field
+    elem : A
+    in-list : elem ∈ ls
+
+tabulate-suc : ∀ {a} {A : Set a} → {ls : List A} → {x : A} → List (ElemInList ls) → List (ElemInList (x ∷ ls))
+tabulate-suc [] = []
+tabulate-suc (eil ∷ tabs) =
+  let rec = tabulate-suc tabs
+      open ElemInList
+  in record { elem = eil .elem ; in-list = S (eil .in-list) } ∷ rec
+
+tabulate-∈ : ∀ {a} {A : Set a} → (ls : List A) → List (ElemInList ls)
+tabulate-∈ [] = []
+tabulate-∈ (x ∷ ls) =
+  let rec = tabulate-∈ ls
+  in record { elem = x ; in-list = Z } ∷ tabulate-suc rec
 
 \end{code}
