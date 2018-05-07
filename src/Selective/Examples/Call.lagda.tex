@@ -17,6 +17,7 @@ open import Membership using (
               )
 open import Data.Unit using (⊤ ; tt)
 open import Relation.Nullary using (yes ; no)
+open import Relation.Nullary.Decidable using (⌊_⌋)
 
 open SelectedMessage
 
@@ -28,9 +29,7 @@ call-select-unwrap : ∀ {MtIn MT} {IS : InboxShape} →
                        All receive-field-content MT →
                        (ValueType UniqueTag ∷ MtIn) ∈ IS →
                        Bool
-call-select-unwrap tag Z (tag' ∷ fs) Z with (tag ≟ tag')
-... | yes p = true
-... | no p = false
+call-select-unwrap tag Z (tag' ∷ fs) Z = ⌊ tag ≟ tag' ⌋
 call-select-unwrap _ Z _ (S p) = false
 call-select-unwrap _ (S x) _ Z = false
 call-select-unwrap tag (S x) fs (S p) = call-select-unwrap tag x fs p
@@ -62,7 +61,7 @@ The actor that we're calling must exist as a variable.
 The actor that we're calling must accept a message containing the unique tag and a reference.
 There are no further constraints on the additional fields \AgdaBound{MtTo}.
 \begin{code}
-       ((ValueType UniqueTag ∷ ReferenceType IS' ∷ MtTo) ∈ To) →  
+       ((ValueType UniqueTag ∷ ReferenceType IS' ∷ MtTo) ∈ To) →
 \end{code}
 The caller must supply the unique tag manually, but it would be easy to extend the actor monad
 with some state that can provide unique tags automatically.

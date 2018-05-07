@@ -13,11 +13,12 @@ open import Relation.Binary.PropositionalEquality
             using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
 open import Membership using (
             _∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl
-            ; ⊆-trans ; ⊆-suc ; translate-⊆)
+            ; ⊆-trans ; ⊆-suc ; translate-⊆
+            ; ∈-inc ; ⊆++-refl)
 open import Data.Unit using (⊤ ; tt)
 open import Examples.SelectiveReceive using (
             selective-receive ; SelRec ; waiting-refs
-            ; add-references++ ; ∈-inc ; ⊆++-refl)
+            ; add-references++)
 open import Relation.Nullary using (yes ; no)
 
 open import Size

@@ -1,20 +1,22 @@
 module Selective.SimulationEnvironment where
-open import Membership using (_∈_ ; find-∈)
+open import Membership using (_∈_ ; find-∈ ; _⊆_)
 open import Selective.ActorMonad
+open import NatProps
 
-open import Data.List using (List ; _∷_ ; [] ; map)
+open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
 open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀map)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 open import Data.Nat using (ℕ ; _≟_ ; _<_ ; zero ; suc ; s≤s)
 open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
 open import Data.Unit using (⊤ ; tt)
+open import Data.Bool using (Bool ; true ; false)
 
-open import Level using (Lift ; lift)
+open import Level using (Level ; Lift ; lift) renaming (suc to lsuc)
 open import Size using (Size ; Size<_ ; ↑_ ; ∞)
 
 open import Data.Empty using (⊥)
 open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans ; inspect ; [_])
 open import Relation.Unary using (Decidable) renaming (_⊆_ to _⋐_)
 
 -- We give every actor and inbox a name.
@@ -48,15 +50,6 @@ record NamedInbox : Set₁ where
 -- Inserting duplicate keys is thus pointless and is not done anywhere in the code.
 Store = List NamedInbox
 
--- Decidable inequality
-¬[_] : ∀ {a b : Name} → Dec (a ≡ b) → Set
-¬[ (yes x₁) ] = ⊥
-¬[ (no x₁) ] = ⊤
-
--- Also decidable inequality
-_¬≡_ : ( a b : Name) → Set
-a ¬≡ b = ¬[ a ≟ b ]
-
 -- A pointer into the store.
 -- This is a proof that the name points to an inbox shape in the store.
 -- The store is a key-value list that returns the first value matching the key (name).
@@ -66,7 +59,7 @@ a ¬≡ b = ¬[ a ≟ b ]
 data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
   zero : ∀ {xs}
          → n ↦ S ∈e (inbox# n [ S ] ∷ xs)
-  suc  : ∀ {n' : Name} { S' xs} {pr : n ¬≡ n'}
+  suc  : ∀ {n' : Name} { S' xs} {pr : ¬ n ≡ n'}
          → n ↦ S ∈e xs
          → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
 
@@ -129,25 +122,48 @@ named-field-content (ReferenceType Fw) = Name
 -- The decision to use names for references and pointers, rather than just ∈,
 -- makes it possible to prove that a sent message containing a reference
 -- does not need to be modified when more actors are added.
-data NamedMessage (To : InboxShape): Set₁ where
-  NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
+record NamedMessage (To : InboxShape): Set₁ where
+  constructor NamedM
+  field
+    {MT} : MessageType
+    named-message-type : MT ∈ To
+    named-fields : All named-field-content MT
 
-named-message-fields : ∀ {To} → NamedMessage To → Σ[ MT ∈ MessageType ] All named-field-content MT
-named-message-fields (NamedM {MT} x x₁) = MT , x₁
+unname-message : ∀ {S} → NamedMessage S → Message S
+unname-message (NamedM x fields) = Msg x (do-the-work fields)
+  where
+    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
+    do-the-work {[]} nfc = []
+    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
+    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
+
+filter-named : ∀ {IS} → MessageFilter IS → NamedMessage IS → Bool
+filter-named filter message = filter (unname-message message)
 
 Inbox : InboxShape → Set₁
 Inbox is = List (NamedMessage is)
 
 data Inboxes : (store : Store) → Set₁ where
   [] : Inboxes []
-  _∷_ : ∀ {store name inbox-shape} → List (NamedMessage inbox-shape) →
+  _∷_ : ∀ {store name inbox-shape} → Inbox inbox-shape →
     (inboxes : Inboxes store) → Inboxes (inbox# name [ inbox-shape ] ∷ store)
+
+data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {name : Name} : (store : Store) → (Inboxes store) → (name ↦ inbox-shape ∈e store) → Set₁ where
+  zero : ∀ {store} {inbs : Inboxes store} →
+         InboxForPointer inbox (inbox# name [ inbox-shape ] ∷ store) (inbox ∷ inbs) zero
+  suc : ∀ {n' : Name} {S' inb' store} {p : name ↦ inbox-shape ∈e store} {inbs : Inboxes store} {pr : ¬ name ≡ n'} →
+        InboxForPointer inbox store inbs p →
+        InboxForPointer inbox (inbox# n' [ S' ] ∷ store) (inb' ∷ inbs) (suc {pr = pr} p)
 
 -- Property that there exists an inbox of the right shape in the list of inboxes
 -- This is used both for proving that every actor has an inbox,
 -- and for proving that every reference known by an actor has an inbox
 has-inbox : Store → Actor → Set
 has-inbox store actor = Actor.name actor ↦ Actor.inbox-shape actor ∈e store
+
+
+inbox-for-actor : ∀ {store} (inbs : Inboxes store) (actor : Actor) (p : has-inbox store actor) (inb : Inbox (Actor.inbox-shape actor)) → Set₁
+inbox-for-actor {store} inbs actor p inb = InboxForPointer inb store inbs p
 
 reference-has-pointer : Store → NamedInbox → Set₁
 reference-has-pointer store ni = name ni comp↦ shape ni ∈ store
@@ -203,27 +219,16 @@ NameFresh : Store → ℕ → Set₁
 NameFresh store n = All (λ v → name v Data.Nat.< n) store
   where open NamedInbox
 
-
--- convert < to ¬≡
-<-¬≡ : ∀ {n m} → n < m → n ¬≡ m
-<-¬≡ {zero} {zero} ()
-<-¬≡ {zero} {suc m} p = _
-<-¬≡ {suc n} {zero} ()
-<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) with (<-¬≡ p)
-... | q with (n ≟ m)
-<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) | () | yes p₁
-<-¬≡ {suc n} {suc m} (Data.Nat.s≤s p) | q | no ¬p = _
-
 -- If a name is fresh for a store (i.e. all names in the store are < than the name),
 -- then none of the names in the store is equal to the name
-Fresh¬≡ : ∀ {store name } → NameFresh store name → (All (λ m → (NamedInbox.name m) ¬≡ name) store)
+Fresh¬≡ : ∀ {store name } → NameFresh store name → (All (λ m → ¬ (NamedInbox.name m) ≡ name) store)
 Fresh¬≡ ls = ∀map (λ frsh → <-¬≡ frsh) ls
 
 record NameSupply (store : Store) : Set₁ where
   field
     name : Name
     freshness-carrier : All (λ v → NamedInbox.name v < name) store
-    name-is-fresh : {n : Name} {IS : InboxShape} → n ↦ IS ∈e store → ¬[ n ≟ name ]
+    name-is-fresh : {n : Name} {IS : InboxShape} → n ↦ IS ∈e store → ¬ n ≡ name
 
 open NameSupply
 
@@ -239,11 +244,11 @@ record NameSupplyStream (i : Size) (store : Store) : Set₁ where
 suc-helper : ∀ {store name IS n} →
              name ↦ IS ∈e store →
              All (λ v → suc (NamedInbox.name v) Data.Nat.≤ n) store →
-             ¬[ name ≟ n ]
+             ¬ name ≡ n
 suc-helper zero (px ∷ p) = <-¬≡ px
 suc-helper (suc q) (px ∷ p) = suc-helper q p
 
-suc-p : ∀ {store name n x shape} → ¬[ name ≟ n ] → name comp↦ shape ∈ store → name comp↦ shape ∈ (inbox# n [ x ] ∷ store)
+suc-p : ∀ {store name n x shape} → ¬ name ≡ n → name comp↦ shape ∈ store → name comp↦ shape ∈ (inbox# n [ x ] ∷ store)
 suc-p pr [p: actual-has-pointer ][handles: actual-handles-wanted ] = [p: (suc {pr = pr} actual-has-pointer) ][handles: actual-handles-wanted ]
 
 open NameSupplyStream
@@ -269,25 +274,254 @@ name-supply-singleton .next = stream-builder (name-supply-singleton .supply)
     stream-builder ns IS .supply = next-name-supply ns IS
     stream-builder ns IS .next = stream-builder (next-name-supply ns IS)
 
+data ActorConstructor : Set where
+  Return : ActorConstructor
+  Bind : ActorConstructor
+  Spawn : ActorConstructor
+  Send : ActorConstructor
+  Receive : ActorConstructor
+  Self : ActorConstructor
+  Strengthen : ActorConstructor
+  Selective : ActorConstructor
+
+data ActorAtConstructor : ActorConstructor → Actor → Set₂ where
+  AtReturn :
+    ∀ {IS A B refs mid post name}
+    {cont : ContStack ∞ IS mid post}
+    {v : A}
+    {per} →
+    ActorAtConstructor Return (record
+      { inbox-shape = IS
+      ; A = B
+      ; references = refs
+      ; pre = mid v
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Return v ⟶ cont
+      ; name = name
+      })
+  AtBind :
+    ∀ {IS A B C refs pre mid name}
+    {m : ∞ActorM ∞ IS A pre mid}
+    {post : B → TypingContext}
+    {f : (x : A) →
+    ∞ActorM ∞ IS B (mid x) post}
+    {contpost : C → TypingContext}
+    {cont : ContStack ∞ IS post contpost} →
+    ∀ {per} →
+    ActorAtConstructor Bind (record
+      { inbox-shape = IS
+      ; A = C
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = contpost
+      ; computation = (m ∞>>= f) ⟶ cont
+      ; name = name
+      })
+  AtSpawn :
+    ∀ {IS NewIS A B refs pre post postN name}
+    {m : ActorM ∞ NewIS A [] postN}
+    {cont : ContStack ∞ IS (λ _ → NewIS ∷ pre) post}
+    {per} →
+    ActorAtConstructor Spawn (record
+      { inbox-shape = IS
+      ; A = B
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Spawn m ⟶ cont
+      ; name = name
+      })
+  AtSend :
+    ∀ {IS ToIS A refs pre post name}
+    {canSendTo : pre ⊢ ToIS}
+    {msg : SendMessage ToIS pre}
+    {cont : ContStack ∞ IS (λ _ → pre) post}
+    {per} →
+    ActorAtConstructor Send (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = (Send canSendTo msg) ⟶ cont
+      ; name = name
+      })
+  AtReceive :
+    ∀ {IS A refs pre post name}
+    {cont : ContStack ∞ IS (add-references pre) post}
+    {per} →
+    ActorAtConstructor Receive (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Receive ⟶ cont
+      ; name = name
+      })
+  AtSelective :
+    ∀ {IS A refs pre post name}
+    {filter : MessageFilter IS}
+    {cont : ContStack ∞ IS (add-selected-references pre) post}
+    {per} →
+    ActorAtConstructor Selective (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = SelectiveReceive filter ⟶ cont
+      ; name = name
+      })
+  AtSelf :
+    ∀ {IS A refs pre post name}
+    {cont : ContStack ∞ IS (λ _ → IS ∷ pre) post}
+    {per} →
+    ActorAtConstructor Self (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = Self ⟶ cont
+      ; name = name
+      })
+  AtStrengthen :
+    ∀ {IS A refs ys xs post name}
+    {inc : ys ⊆ xs}
+    {cont : ContStack ∞ IS (λ _ → ys) post}
+    {per} →
+    ActorAtConstructor Strengthen (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = xs
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = (Strengthen inc) ⟶ cont
+      ; name = name
+      })
+
+data ActorHasContinuation : Actor → Set₂ where
+  HasContinuation :
+    ∀ {IS A B C refs pre mid contmid post name}
+    {m : ActorM ∞ IS A pre mid}
+    {f : Cont ∞ IS {A} {B} mid contmid}
+    {cont : ContStack ∞ IS contmid post}
+    {v : A}
+    {per} →
+    ActorHasContinuation (record
+      { inbox-shape = IS
+      ; A = C
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = m ⟶ (f ∷ cont)
+      ; name = name
+      })
+
+data ActorHasNoContinuation : Actor → Set₂ where
+  NoContinuation :
+    ∀ {IS A refs pre post name}
+    {m : ActorM ∞ IS A pre post}
+    {v : A}
+    {per} →
+    ActorHasNoContinuation (record
+      { inbox-shape = IS
+      ; A = A
+      ; references = refs
+      ; pre = pre
+      ; pre-eq-refs = per
+      ; post = post
+      ; computation = m ⟶ []
+      ; name = name
+      })
+
+record SplitList {a : Level} {A : Set a} (ls : List A) : Set (lsuc a) where
+  field
+    heads : List A
+    el : A
+    tails : List A
+    is-ls : (heads) ++ (el ∷ tails) ≡ ls
+
+data FoundInList {a : Level} {A : Set a} (ls : List A) (f : A → Bool) : Set (lsuc a) where
+  Found : (split : SplitList ls) → (f (SplitList.el split) ≡ true) → FoundInList ls f
+  Nothing : FoundInList ls f
+
+find-split : {a : Level} {A : Set a} (ls : List A) (f : A → Bool) → FoundInList ls f
+find-split [] f = Nothing
+find-split (x ∷ ls) f with (f x) | (inspect f x)
+... | false | p = add-x (find-split ls f)
+  where
+    add-x : FoundInList ls f → FoundInList (x ∷ ls) f
+    add-x (Found split x₁) = Found (record { heads = x ∷ heads split ; el = el split ; tails = tails split ; is-ls = cong (_∷_ x) (is-ls split) }) x₁
+      where open SplitList
+    add-x Nothing = Nothing
+... | true | [ eq ] = Found (record { heads = [] ; el = x ; tails = ls ; is-ls = refl }) eq
+
+split-all-el : ∀ {a p} {A : Set a} {P : A → Set p} (ls : List A) → All P ls → (sl : SplitList ls) → (P (SplitList.el sl))
+split-all-el [] ps record { heads = [] ; el = el ; tails = tails ; is-ls = () }
+split-all-el [] ps record { heads = (x ∷ heads) ; el = el ; tails = tails ; is-ls = () }
+split-all-el (x ∷ ls) (px ∷ ps) record { heads = [] ; el = .x ; tails = .ls ; is-ls = refl } = px
+split-all-el (x ∷ ls) (px ∷ ps) record { heads = (x₁ ∷ heads) ; el = el ; tails = tails ; is-ls = refl } =
+  split-all-el ls ps (record { heads = heads ; el = el ; tails = tails ; is-ls = refl })
+
+data InboxState : Set where
+  Empty NonEmpty : InboxState
+
+data InboxInState {S : InboxShape} : InboxState → Inbox S → Set₁ where
+  IsEmpty : InboxInState Empty []
+  HasMessage : {nm : NamedMessage S} {rest : Inbox S} → InboxInState NonEmpty (nm ∷ rest)
+
+data InboxInFilterState {S : InboxShape} {filter : NamedMessage S → Bool} (inbox : Inbox S) : FoundInList inbox filter → Set₁ where
+  IsEmpty : InboxInFilterState inbox Nothing
+  HasMessage : {split : SplitList inbox} {p : filter (SplitList.el split) ≡ true} → InboxInFilterState inbox (Found split p)
+
+selected-filter : ∀ actor → ActorAtConstructor Selective actor → MessageFilter (Actor.inbox-shape actor)
+selected-filter record { computation = SelectiveReceive filter ⟶ _ } AtSelective = filter
+
+data IsBlocked (store : Store) (inbs : Inboxes store) (actor : Actor) : Set₂ where
+  BlockedReturn :
+    ActorAtConstructor Return actor →
+    ActorHasNoContinuation actor →
+    IsBlocked store inbs actor
+  BlockedReceive :
+    ActorAtConstructor Receive actor →
+    (p : has-inbox store actor) →
+    InboxForPointer [] store inbs p →
+    IsBlocked store inbs actor
+  BlockedSelective :
+    (aac : ActorAtConstructor Selective actor) →
+    (point : has-inbox store actor) →
+    ∀ inbox →
+    InboxForPointer inbox store inbs point →
+    InboxInFilterState {filter = filter-named (selected-filter actor aac)} inbox Nothing →
+    IsBlocked store inbs actor
+
 -- The environment is a list of actors and inboxes,
 -- with a proof that every ector is valid in the context of said list of inboxes
 record Env : Set₂ where
   field
-    -- The currently active actors
+    -- raw
     acts : List Actor
-    -- The currently blocked actors, i.e. actors doing receive without any messages in its inbox.
-    -- By separating blocked and non-blocked actors we both optimize the simulation to not try to run
-    -- actors that won't succed in taking a step, and we get a clear step-condition when there are no
-    -- non-blocked actors left.
     blocked : List Actor
     store : Store
     env-inboxes : Inboxes store
-    -- The proofs that an actor and a blocked actor is valid is actually the same proof,
-    -- but kept in a separate list.
+    name-supply : NameSupplyStream ∞ store
+    -- coherence
     actors-valid : All (ValidActor store) acts
     blocked-valid : All (ValidActor store) blocked
     messages-valid : InboxesValid store env-inboxes
-    name-supply : NameSupplyStream ∞ store
+    -- weak progress
+    blocked-no-progress : All (IsBlocked store env-inboxes) blocked
 
 -- The empty environment
 empty-env : Env
@@ -300,6 +534,7 @@ empty-env = record
              ; blocked-valid = []
              ; messages-valid = []
              ; name-supply = name-supply-singleton
+             ; blocked-no-progress = []
              }
 
 -- An environment containing a single actor.
@@ -323,4 +558,51 @@ singleton-env {IS} {A} {post} actor = record
                        ; blocked-valid = []
                        ; messages-valid = [] ∷ []
                        ; name-supply = name-supply-singleton .next IS
+                       ; blocked-no-progress = []
                        }
+
+
+data Focus (act : Actor) : Env → Set₂ where
+  Focused :
+    {rest : List Actor}
+    {bl : List Actor}
+    {str : Store}
+    {inbs : Inboxes str}
+    {rv : All (ValidActor str) rest}
+    {bv : All (ValidActor str) bl}
+    {bib : All (IsBlocked str inbs) bl}
+    {mv : InboxesValid str inbs}
+    {ns : NameSupplyStream ∞ str}
+    {va : ValidActor str act} →
+    Focus act (record
+      { acts = act ∷ rest
+      ; blocked = bl
+      ; store = str
+      ; env-inboxes = inbs
+      ; actors-valid = va ∷ rv
+      ; blocked-valid = bv
+      ; messages-valid = mv
+      ; name-supply = ns
+      ; blocked-no-progress = bib
+      })
+
+data Done : Env → Set₂ where
+  AllBlocked :
+    {bl : List Actor}
+    {str : Store}
+    {inbs : Inboxes str}
+    {bv : All (ValidActor str) bl}
+    {bib : All (IsBlocked str inbs) bl}
+    {mv : InboxesValid str inbs}
+    {ns : NameSupplyStream ∞ str} →
+    Done (record
+            { acts = []
+            ; blocked = bl
+            ; store = str
+            ; env-inboxes = inbs
+            ; name-supply = ns
+            ; actors-valid = []
+            ; blocked-valid = bv
+            ; messages-valid = mv
+            ; blocked-no-progress = bib
+            })
