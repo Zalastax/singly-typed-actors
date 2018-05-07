@@ -114,8 +114,8 @@ Our representation of subsets uses two data structures: \AgdaDatatype{∈} and \
 \AgdaDatatype{∈} is the list or set membership relation,
 which we model as a Peano number that tells at what position the element occurs in the list.
 An element that appears at the head of a list is at index \AgdaInductiveConstructor{Z},
-and an element that appears somewhere in the tail of the list is
-reached by succeeding (\AgdaInductiveConstructor{S}) into the tail of the list.
+and the index of an element that appears somewhere in the tail of the list is
+the successor (\AgdaInductiveConstructor{S}) of its index in the tail.
 
 \AgdaCatch{Membership}{ElementIn}
 
@@ -564,4 +564,3 @@ strengthen inc .force = Strengthen inc
 ⊠-of-values (x ∷ vs) = (ValueType x ∷ []) ∷ ⊠-of-values vs
 \end{code}
 %</ActorMonadHelpers>
-
