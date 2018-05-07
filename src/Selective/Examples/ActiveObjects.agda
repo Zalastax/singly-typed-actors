@@ -51,7 +51,7 @@ active-method IS st var-f ci =
   let input-type = Message (active-request-type ci)
   in {i : Size} →
      {caller : InboxShape} →
-     (input : input-type) → 
+     (input : input-type) →
      (state : st) →
      ∞ActorM i IS
        (ActiveReply ci st var-f input caller)

@@ -23,6 +23,12 @@ selective-generated-main:
 	sed 's/__ENTRY__/$(ENTRY)/' src/Selective/Examples/Main-template.agda > src/Selective/Examples/Main-generated.agda
 	stack exec agda -- -c src/Selective/Examples/Main-generated.agda
 
+test-that-all-compliles:
+	$(MAKE) latex-clean
+	$(MAKE) latex
+	stack exec agda -- --no-main -c src/Selective/Examples/Main-generated.agda
+	stack exec agda -- --no-main -c src/Examples/Main-generated.agda
+
 clean:
 ifneq ($(strip $(agda-objects)),)
 	rm $(agda-objects)

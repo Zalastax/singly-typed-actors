@@ -55,22 +55,23 @@ reduce-bound-return : {act : Actor} → (env : Env) → Focus act env →
 reduce-bound-return env@record {
   acts = actor@record { computation = Return v ⟶ (f ∷ cont) } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
-  } Focused AtReturn HasContinuation = env'
-  where
-    actor' : Actor
-    actor' = replace-actorM actor ((f v .force) ⟶ cont)
-    env' : Env
-    env' = replace-focused
-             env
-             Focused
-             actor'
-             (rewrap-valid-actor AreSame actor-valid)
+  } Focused AtReturn HasContinuation =
+    let
+      actor' : Actor
+      actor' = replace-actorM actor ((f v .force) ⟶ cont)
+      env' : Env
+      env' = replace-focused
+               env
+               Focused
+               actor'
+               (rewrap-valid-actor AreSame actor-valid)
+    in env'
 
 reduce-bind : {act : Actor} → (env : Env) → Focus act env →
               ActorAtConstructor Bind act →
               Env
-reduce-bind env@record { acts = actor@record { computation = (m ∞>>= f) ⟶ cont } ∷ rest ; actors-valid = actor-valid ∷ rest-valid } Focused AtBind = env'
-  where
+reduce-bind env@record { acts = actor@record { computation = (m ∞>>= f) ⟶ cont } ∷ rest ; actors-valid = actor-valid ∷ rest-valid } Focused AtBind =
+  let
     actor' : Actor
     actor' = replace-actorM actor ((m .force) ⟶ (f ∷ cont))
     env' : Env
@@ -79,6 +80,7 @@ reduce-bind env@record { acts = actor@record { computation = (m ∞>>= f) ⟶ co
              Focused
              actor'
              (rewrap-valid-actor AreSame actor-valid)
+  in env'
 
 reduce-spawn : {act : Actor} → (env : Env) → Focus act env →
                ActorAtConstructor Spawn act →
@@ -86,8 +88,8 @@ reduce-spawn : {act : Actor} → (env : Env) → Focus act env →
 reduce-spawn env@record {
   acts = actor@record { computation = Spawn {NewIS} {B} act ⟶ cont } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
-  } Focused AtSpawn = env'''
-  where
+  } Focused AtSpawn =
+  let
     new-name : Name
     new-name = env .name-supply .supply .name
     new-store-entry : NamedInbox
@@ -104,6 +106,7 @@ reduce-spawn env@record {
     valid'' = add-reference-valid RefAdded valid' [p: zero ][handles: ⊆-refl ]
     env''' : Env
     env''' = replace-focused env'' Focused actor' valid''
+  in env'''
 
 reduce-send : {act : Actor} → (env : Env) → Focus act env →
               ActorAtConstructor Send act →
@@ -111,8 +114,8 @@ reduce-send : {act : Actor} → (env : Env) → Focus act env →
 reduce-send env@record {
   acts = actor@record { computation = Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
-  } Focused AtSend = withUpdatedInbox
-  where
+  } Focused AtSend =
+  let
     to-reference : FoundReference (store env) ToIS
     to-reference = lookup-reference-act actor-valid canSendTo
     namedFields = name-fields-act (store env) actor fields actor-valid
@@ -141,6 +144,7 @@ reduce-send env@record {
                          withM
                          (underlying-pointer to-reference)
                          updater
+  in withUpdatedInbox
 
 
 reduce-receive-without-message : {act : Actor} → (env : Env) → Focus act env →
@@ -161,8 +165,8 @@ reduce-receive-with-message : {act : Actor} → (env : Env) → Focus act env �
 reduce-receive-with-message env@record {
   acts = actor@record { computation = (Receive ⟶ cont) } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
-  } Focused AtReceive p (nm ∷ messages) (nmv ∷ vms) HasMessage ifa = env'
-  where
+  } Focused AtReceive p (nm ∷ messages) (nmv ∷ vms) HasMessage ifa =
+  let
     inboxesAfter = update-inbox
                      (env .store)
                      (env .env-inboxes)
@@ -200,16 +204,13 @@ reduce-receive-with-message env@record {
              ; messages-valid = updated .inboxes-valid
              ; blocked-no-progress = unblock-split .blocked-no-prog
              }
+  in env'
 
 
 reduce-receive : {act : Actor} → (env : Env) → Focus act env →
                  ActorAtConstructor Receive act →
                  Env
-reduce-receive env@record {
-  acts = actor ∷ rest
-  ; actors-valid = actor-valid ∷ _
-  } Focused AtReceive =
-  choose-reduction (get-inbox env (actor-valid .actor-has-inbox))
+reduce-receive env@record { acts = actor ∷ rest ; actors-valid = actor-valid ∷ _ } Focused AtReceive = choose-reduction (get-inbox env (actor-valid .actor-has-inbox))
   where
     open GetInbox
     choose-reduction : (gi : GetInbox (env .store) (env .env-inboxes) (actor-valid .actor-has-inbox)) → Env
@@ -217,6 +218,26 @@ reduce-receive env@record {
       reduce-receive-without-message env Focused AtReceive _ (gi .right-inbox)
     choose-reduction gi@record { messages = _ ∷ _ } =
       reduce-receive-with-message env Focused AtReceive _ (gi .messages) (gi .valid) HasMessage (gi .right-inbox)
+
+reduce-self : {act : Actor} → (env : Env) → Focus act env →
+              ActorAtConstructor Self act →
+              Env
+reduce-self env@record { acts = actor@record {
+  computation = Self ⟶ cont } ∷ _
+  ; actors-valid = actor-valid ∷ _
+  } Focused AtSelf =
+  let
+    actor' : Actor
+    actor' = add-reference actor inbox# (actor .name) [ (actor .inbox-shape) ] ((Return _) ⟶ cont)
+    actor-valid' : ValidActor (env .store) actor'
+    actor-valid' = add-reference-valid RefAdded actor-valid [p: (actor-valid .actor-has-inbox) ][handles: ⊆-refl ]
+    env' : Env
+    env' = replace-focused
+             env
+             Focused
+             actor'
+             actor-valid'
+  in env'
 
 reduce-selective-with-message : {act : Actor} → (env : Env) → Focus act env →
                                 (aac : ActorAtConstructor Selective act) →
@@ -269,7 +290,8 @@ reduce-selective-without-message : {act : Actor} → (env : Env) → Focus act e
                                  inbox-for-actor (env .env-inboxes) act point inbox →
                                  InboxInFilterState {filter = filter-named (selected-filter act aac)} inbox Nothing →
                                  Env
-reduce-selective-without-message env Focused AtSelective point inbox ifa iifs = block-focused env Focused (BlockedSelective AtSelective point inbox ifa iifs)
+reduce-selective-without-message env Focused AtSelective point inbox ifa iifs =
+  block-focused env Focused (BlockedSelective AtSelective point inbox ifa iifs)
 
 reduce-selective : {act : Actor} → (env : Env) → Focus act env →
                  ActorAtConstructor Selective act →
@@ -286,33 +308,14 @@ reduce-selective env@record {
     choose-reduction gi (Found split x) = reduce-selective-with-message env Focused AtSelective _ (gi .messages) (gi .valid) (gi .right-inbox) (HasMessage {split = split} {x})
     choose-reduction gi Nothing = reduce-selective-without-message env Focused AtSelective _ (gi .messages) (gi .right-inbox) IsEmpty
 
-reduce-self : {act : Actor} → (env : Env) → Focus act env →
-              ActorAtConstructor Self act →
-              Env
-reduce-self env@record { acts = actor@record {
-  computation = Self ⟶ cont } ∷ _
-  ; actors-valid = actor-valid ∷ _
-  } Focused AtSelf = env'
-  where
-    actor' : Actor
-    actor' = add-reference actor inbox# (actor .name) [ (actor .inbox-shape) ] ((Return _) ⟶ cont)
-    actor-valid' : ValidActor (env .store) actor'
-    actor-valid' = add-reference-valid RefAdded actor-valid [p: (actor-valid .actor-has-inbox) ][handles: ⊆-refl ]
-    env' : Env
-    env' = replace-focused
-             env
-             Focused
-             actor'
-             actor-valid'
-
 reduce-strengthen : {act : Actor} → (env : Env) → Focus act env →
                     ActorAtConstructor Strengthen act →
                     Env
 reduce-strengthen env@record {
   acts = actor@record { computation = Strengthen {ys} inc ⟶ cont } ∷ _
   ; actors-valid = actor-valid ∷ _
-  } Focused AtStrengthen = env'
-  where
+  } Focused AtStrengthen =
+  let
     lifted-references = lift-references inc (references actor) (pre-eq-refs actor)
     actor' : Actor
     actor' = lift-actor actor (lifted-references .contained) (lifted-references .contained-eq-inboxes) (Return _ ⟶ cont)
@@ -324,6 +327,7 @@ reduce-strengthen env@record {
              Focused
              actor'
              actor-valid'
+  in env'
 
 reduce : {act : Actor} → (env : Env) → Focus act env → Env
 reduce env@record { acts = record { computation = (Return val ⟶ []) } ∷ _ } Focused =

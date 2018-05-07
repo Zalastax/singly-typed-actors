@@ -240,25 +240,6 @@ update-inbox {name} store {store'} (x ∷ inboxes) (px ∷ proofs) (suc p) f =
     unaffected pr  zero = zero
     unaffected pr (suc ifp) = suc (others-unaffected updated pr ifp)
 
-{-
-other-inboxes-unaffected : {name name' : Name} {IS IS' : InboxShape} →
-  (store : Store) →
-  {store' : Store} →
-  (inboxes : Inboxes store') →
-  (valid : InboxesValid store inboxes) →
-  (p : name ↦ IS ∈e store') →
-  {f : InboxUpdater store IS} →
-  (p' : name' ↦ IS' ∈e store') →
-  {inb : Inbox IS'} →
-  ¬ name' ≡ name →
-  (InboxForPointer inb store' inboxes p') →
-  InboxForPointer inb store' (updated-inboxes (update-inboxes store inboxes valid p f)) p'
-other-inboxes-unaffected store .(_ ∷ _) valid zero zero pr zero = ⊥-elim (pr refl)
-other-inboxes-unaffected store .(_ ∷ _) valid (suc p) zero pr zero = {!!}
-other-inboxes-unaffected store .(_ ∷ _) valid zero (suc p') pr (suc ifp) = {!!}
-other-inboxes-unaffected store .(_ ∷ _) valid (suc p) (suc p') pr (suc ifp) = {!!}
--}
-
 -- Move the actor that is at the top of the list, to the back of the list
 -- This is done to create a round-robin system for the actors, since run-env always picks the actor at the top
 -- Uses the insight that the order of the inboxes soes not correspond to the order of the Actors,
@@ -280,20 +261,21 @@ top-actor-to-back env | x ∷ acts | (y ∷ prfs) = record
 
 -- An actor is still valid if we add a new inbox to the store, as long as that name is not used in the store before
 valid-actor-suc : ∀ {store actor IS} → (ns : NameSupply store) → ValidActor store actor → ValidActor (inbox# ns .name [ IS ] ∷ store) actor
-valid-actor-suc ns va = record {
-  actor-has-inbox = suc {pr = ns .name-is-fresh (actor-has-inbox va)} (actor-has-inbox va)
-  ; references-have-pointer = ∀map (λ p → suc-p (ns .name-is-fresh (actual-has-pointer p)) p) (references-have-pointer va)
-  }
-  where
-    open ValidActor
-    open _comp↦_∈_
+valid-actor-suc ns va =
+  let open ValidActor
+      open _comp↦_∈_
+  in record {
+    actor-has-inbox = suc {pr = ns .name-is-fresh (actor-has-inbox va)} (actor-has-inbox va)
+    ; references-have-pointer = ∀map (λ p → suc-p (ns .name-is-fresh (actual-has-pointer p)) p) (references-have-pointer va)
+    }
 
 valid-references-suc : ∀ {store references IS} →
                      (ns : NameSupply store) →
                      All (reference-has-pointer store) references →
                      All (reference-has-pointer (inbox# (ns .name) [ IS ] ∷ store)) references
-valid-references-suc ns pointers = ∀map (λ p → suc-p (ns .name-is-fresh (actual-has-pointer p)) p) pointers
-  where open _comp↦_∈_
+valid-references-suc ns pointers =
+  let open _comp↦_∈_
+  in ∀map (λ p → suc-p (ns .name-is-fresh (actual-has-pointer p)) p) pointers
 
 -- All the messages in an inbox are still valid if we add a new inbox to the store, as long as that name is not used in the store before
 messages-valid-suc : ∀ {store IS x} {inb : Inbox IS} → (ns : NameSupply store) → all-messages-valid store inb → all-messages-valid (inbox# ns .name [ x ] ∷ store) inb
@@ -339,6 +321,7 @@ add-top {IS} {A} {post} m env = record
                    ; blocked-no-progress = ∀map (is-blocked-suc (env .name-supply .supply)) (env .blocked-no-progress)
                    }
   where
+    -- ad-hoc ∀map, because we are not using All here
     map-suc : (store : Store) → {store' : Store} → {inbs : Inboxes store'} → InboxesValid store inbs → (ns : NameSupply store) → InboxesValid (inbox# ns .name [ IS ] ∷ store) inbs
     map-suc store [] _ = []
     map-suc store (x ∷ valid) ns = messages-valid-suc ns x ∷ (map-suc store valid ns)
@@ -395,7 +378,8 @@ unblock-actors updated [] [] [] = record
                                             ; blocked-valid = []
                                             }
 unblock-actors {store} {original} {n} updated (x ∷ blckd) (v ∷ blckd-valid) (ib ∷ is-blocked) with (n ≟ (name x))
-... | yes p = let rec = unblock-actors updated blckd blckd-valid is-blocked
+... | yes p =
+  let rec = unblock-actors updated blckd blckd-valid is-blocked
   in record
        { unblocked = x ∷ rec .unblocked
        ; unblocked-updated = p ∷ rec .unblocked-updated
@@ -404,7 +388,8 @@ unblock-actors {store} {original} {n} updated (x ∷ blckd) (v ∷ blckd-valid) 
        ; blocked-no-prog = rec .blocked-no-prog
        ; blocked-valid = rec .blocked-valid
        }
-... | no ¬p = let rec = unblock-actors updated blckd blckd-valid is-blocked
+... | no ¬p =
+  let rec = unblock-actors updated blckd blckd-valid is-blocked
   in record
        { unblocked = rec .unblocked
        ; unblocked-updated = rec .unblocked-updated
@@ -421,23 +406,21 @@ unblock-actors {store} {original} {n} updated (x ∷ blckd) (v ∷ blckd-valid) 
 
 update-inbox-env : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (store env) →
                  (f : ValidMessageList (store env) IS → ValidMessageList (store env) IS) → Env
-update-inbox-env {name} {IS} env p f = let
-  updated = update-inbox (store env) (env-inboxes env) (messages-valid env) p f
-  unblock-split = unblock-actors updated (blocked env) (blocked-valid env) (blocked-no-progress env)
-    in record
-                           { acts = (unblocked unblock-split) ++ acts env
-                           ; blocked = still-blocked unblock-split
-                           ; env-inboxes = updated-inboxes updated
-                           ; store = store env
-                           ; actors-valid = ++⁺ (unblock-split .unblocked-valid) (env .actors-valid)
-                           ; blocked-valid = unblock-split .blocked-valid
-                           ; messages-valid = inboxes-valid updated
-                           ; name-supply = env .name-supply
-                           ; blocked-no-progress = unblock-split .blocked-no-prog
-                           }
-
-
-
+update-inbox-env {name} {IS} env p f =
+  let
+    updated = update-inbox (store env) (env-inboxes env) (messages-valid env) p f
+    unblock-split = unblock-actors updated (blocked env) (blocked-valid env) (blocked-no-progress env)
+  in record {
+    acts = (unblocked unblock-split) ++ acts env
+    ; blocked = still-blocked unblock-split
+    ; env-inboxes = updated-inboxes updated
+    ; store = store env
+    ; actors-valid = ++⁺ (unblock-split .unblocked-valid) (env .actors-valid)
+    ; blocked-valid = unblock-split .blocked-valid
+    ; messages-valid = inboxes-valid updated
+    ; name-supply = env .name-supply
+    ; blocked-no-progress = unblock-split .blocked-no-prog
+    }
 
 record FoundReference (store : Store) (S : InboxShape) : Set₂ where
   field
@@ -481,19 +464,19 @@ open LiftedReferences
 
 -- Convert a subset for preconditions to a subset for references
 lift-references : ∀ {lss gss} → lss ⊆ gss → (references : List NamedInbox) → map shape references ≡ gss → LiftedReferences lss gss references
-lift-references [] refs refl = record
-                                     { subset-inbox = []
-                                     ; contained = []
-                                     ; subset = []
-                                     ; contained-eq-inboxes = refl
-                                     }
+lift-references [] refs refl = record {
+  subset-inbox = []
+  ; contained = []
+  ; subset = []
+  ; contained-eq-inboxes = refl
+  }
 lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
-... | q  = record
-                                             { subset-inbox = x₁ ∷ subs
-                                             ; contained = contained-el ∷ contained q
-                                             ; subset = (translate-∈ x₁ refs shape refl) ∷ (subset q)
-                                             ; contained-eq-inboxes = combine contained-el-shape y (map shape (contained q)) xs (sym contained-el-ok) (contained-eq-inboxes q)
-                                             }
+... | q  = record {
+  subset-inbox = x₁ ∷ subs
+  ; contained = contained-el ∷ contained q
+  ; subset = (translate-∈ x₁ refs shape refl) ∷ (subset q)
+  ; contained-eq-inboxes = combine contained-el-shape y (map shape (contained q)) xs (sym contained-el-ok) (contained-eq-inboxes q)
+  }
   where
     contained-el : NamedInbox
     contained-el = lookup-parallel x₁ refs shape refl
@@ -540,7 +523,7 @@ lift-valid-actor : ∀ {store} {act act' : Actor} →
 lift-valid-actor (CanBeLifted lr) va =
   record {
     actor-has-inbox = va .actor-has-inbox
-      ; references-have-pointer = All-⊆ (lr .subset) (va .references-have-pointer)
+    ; references-have-pointer = All-⊆ (lr .subset) (va .references-have-pointer)
     }
 
 
@@ -569,27 +552,23 @@ replace-focused env@record {
   } Focused act' valid' =
   replace-actors env (act' ∷ rest) (valid' ∷ rest-valid)
 
-
-
 block-focused : {act : Actor} → (env : Env) → Focus act env → IsBlocked (env .store) (env .env-inboxes) act → Env
 block-focused env@record {
   acts = actor ∷ rest
   ; blocked = blocked
   ; actors-valid = actor-valid ∷ rest-valid
   ; blocked-valid = blocked-valid
-  } Focused blckd = record
-                      { acts = rest
-                      ; blocked = actor ∷ blocked
-                      ; store = env .store
-                      ; env-inboxes = env .env-inboxes
-                      ; name-supply = env .name-supply
-                      ; actors-valid = rest-valid
-                      ; blocked-valid = actor-valid ∷ blocked-valid
-                      ; messages-valid = env .messages-valid
-                      ; blocked-no-progress = blckd ∷ env .blocked-no-progress
-                      }
-
-
+  } Focused blckd = record {
+  acts = rest
+  ; blocked = actor ∷ blocked
+  ; store = env .store
+  ; env-inboxes = env .env-inboxes
+  ; name-supply = env .name-supply
+  ; actors-valid = rest-valid
+  ; blocked-valid = actor-valid ∷ blocked-valid
+  ; messages-valid = env .messages-valid
+  ; blocked-no-progress = blckd ∷ env .blocked-no-progress
+  }
 
 -- Takes a named message and a proof that the named message is valid for the store.
 -- Values are valid for any store and references need a proof that the pointer is valid.
@@ -668,9 +647,10 @@ compatible-handles : ∀ store x refs
                      (px : (map shape refs) ⊢>: x)
                      (w : FoundReference store (actual px)) →
                      x ⊆ actual (reference w)
-compatible-handles store x refs px w with (actual-handles-requested px)
-... | a with (actual-handles-wanted (reference w))
-... | b = ⊆-trans a b
+compatible-handles store x refs px w =
+  let a = actual-handles-requested px
+      b = actual-handles-wanted (reference w)
+  in ⊆-trans a b
 
 make-pointer-compatible : ∀ store x refs
                        (px : (map shape refs) ⊢>: x) →
@@ -687,18 +667,17 @@ make-pointers-compatible : ∀ {MT} store pre refs (eq : map shape refs ≡ pre)
                          FieldsHavePointer store (name-fields pre refs rhp fields eq)
 make-pointers-compatible store pre refs eq [] rhp = []
 make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp = FhpV ∷ make-pointers-compatible store _ refs refl fields rhp
-make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp = FhpR (make-pointer-compatible store x refs px rhp foundFw) ∷ (make-pointers-compatible store _ refs refl fields rhp)
-  where
-    foundFw : FoundReference store (actual px)
-    foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
+make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp =
+  let foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
+  in FhpR (make-pointer-compatible store x refs px rhp foundFw) ∷ (make-pointers-compatible store _ refs refl fields rhp)
 
 -- Removes the next message from an inbox.
 -- This is a no-op if there are no messages in the inbox.
 remove-found-message : {S : InboxShape} → {store : Store} → (filter : MessageFilter S) → (ValidMessageList store S → ValidMessageList store S)
 remove-found-message f record { inbox = [] ; valid = [] } = record { inbox = [] ; valid = [] }
 remove-found-message {s} {store} f record { inbox = (x ∷ inbox₁) ; valid = vx ∷ valid₁ } with (f (unname-message x))
-... | false = add-x (remove-found-message f (record { inbox = inbox₁ ; valid = valid₁ }))
-  where
-    add-x : ValidMessageList store s → ValidMessageList store s
-    add-x record { inbox = inbox ; valid = valid } = record { inbox = x ∷ inbox ; valid = vx ∷ valid }
+... | false =
+  let vml = remove-found-message f (record { inbox = inbox₁ ; valid = valid₁ })
+      open ValidMessageList
+  in record { inbox = x ∷ vml .inbox ; valid = vx ∷ vml .valid }
 ... | true = record { inbox = inbox₁ ; valid = valid₁ }

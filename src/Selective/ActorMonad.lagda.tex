@@ -39,15 +39,23 @@ send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
-data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
-    SendM : {MT : MessageType} → MT ∈ To → All (send-field-content Γ) MT → SendMessage To Γ
+record SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
+  constructor SendM
+  field
+    {MT} : MessageType
+    selected-message-type : MT ∈ To
+    send-fields : All (send-field-content Γ) MT
 
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
 
-data Message (To : InboxShape) : Set₁ where
-    Msg : {MT : MessageType} → MT ∈ To → All receive-field-content MT → Message To
+record Message (To : InboxShape) : Set₁ where
+  constructor Msg
+  field
+    {MT} : MessageType
+    received-message-type : MT ∈ To
+    received-fields : All receive-field-content MT
 
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
@@ -57,11 +65,10 @@ extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 add-references-static : TypingContext → MessageType → TypingContext
 add-references-static Γ MT = extract-references MT ++ Γ
 
-message-type : ∀ {To} → Message To → MessageType
-message-type (Msg {MT} _ _) = MT 
-
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
-add-references Γ msg = add-references-static Γ (message-type msg)
+add-references Γ msg =
+  let open Message
+  in add-references-static Γ (msg .MT)
 
 \end{code}
 %<*MessageFilter>
@@ -88,7 +95,9 @@ selected-type : ∀ {IS}
                     {filter : MessageFilter IS} →
                     SelectedMessage filter →
                     MessageType
-selected-type record {msg = msg } = message-type msg
+selected-type record {msg = msg } =
+  let open Message
+  in msg .MT
 
 add-selected-references : TypingContext → ∀ {IS}
                             {filter : MessageFilter IS} →

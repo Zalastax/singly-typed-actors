@@ -122,11 +122,12 @@ named-field-content (ReferenceType Fw) = Name
 -- The decision to use names for references and pointers, rather than just ∈,
 -- makes it possible to prove that a sent message containing a reference
 -- does not need to be modified when more actors are added.
-data NamedMessage (To : InboxShape): Set₁ where
-  NamedM : {MT : MessageType} → MT ∈ To → All named-field-content MT → NamedMessage To
-
-named-message-fields : ∀ {To} → NamedMessage To → Σ[ MT ∈ MessageType ] All named-field-content MT
-named-message-fields (NamedM {MT} x x₁) = MT , x₁
+record NamedMessage (To : InboxShape): Set₁ where
+  constructor NamedM
+  field
+    {MT} : MessageType
+    named-message-type : MT ∈ To
+    named-fields : All named-field-content MT
 
 unname-message : ∀ {S} → NamedMessage S → Message S
 unname-message (NamedM x fields) = Msg x (do-the-work fields)

@@ -17,6 +17,6 @@ callEntry = singleton-env (Call.calltestActor .force)
 fibEntry = singleton-env (Fib.spawner .force)
 chatEntry = singleton-env (Chat.chat-supervisor .force)
 bookstoreEntry = singleton-env (Bookstore.bookstore-supervisor .force)
-testacEntry = singleton-env (TestAC.hej-test-actor .force)
+testacEntry = singleton-env (TestAC.calculator-test-actor .force)
 
 main = IO.run (run-env testacEntry)

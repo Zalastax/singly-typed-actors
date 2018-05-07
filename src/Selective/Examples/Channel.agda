@@ -109,13 +109,13 @@ accept-response-unwrapped tag p fields (candidate ∷ candidates) with (accept-r
 ... | Unaceptable = accept-response-unwrapped tag p fields candidates
 
 
-accept-response : ∀ {ct receiver} → UniqueTag → ChannelSession ct receiver → MessageFilter receiver
-accept-response {ct} {receiver} utag session (Msg x fields) =
+accept-response : ∀ {ct receiver} → ChannelSession ct receiver → MessageFilter receiver
+accept-response {ct} {receiver} session (Msg x fields) =
   let
   open ChannelType
   open ChannelSession
   candidates = channel-candidates (ct .all-tagged) (session .can-receive)
-    in accept-response-unwrapped utag x fields candidates
+    in accept-response-unwrapped (session .tag) x fields candidates
 
 record ChannelMessageDependent (channel-shape : InboxShape) (accepted-type : MessageType) : Set₁ where
   field
@@ -135,14 +135,14 @@ convert-response-unwrapped tag x fields (candidate ∷ candidates) ok  with (acc
 ... | Unacceptable = convert-response-unwrapped tag x fields candidates ok
 
 
-convert-response : ∀ {ct receiver utag} {session : ChannelSession ct receiver} →
-                     (sm : SelectedMessage (accept-response utag session)) → ChannelMessageDependent (ct .channel-shape) (selected-type sm)
-convert-response {ct} {utag = utag} {session = session} record { msg = (Msg x fields) ; msg-ok = msg-ok } =
+convert-response : ∀ {ct receiver} {session : ChannelSession ct receiver} →
+                     (sm : SelectedMessage (accept-response session)) → ChannelMessageDependent (ct .channel-shape) (selected-type sm)
+convert-response {ct} {session = session} record { msg = (Msg x fields) ; msg-ok = msg-ok } =
   let
   open ChannelType
   open ChannelSession
   candidates = channel-candidates (ct .all-tagged) (session .can-receive)
-    in convert-response-unwrapped utag x fields candidates msg-ok
+    in convert-response-unwrapped (session .tag) x fields candidates msg-ok
 
 from-channel : ∀ {Γ i receiver} →
                ∀ ct →
@@ -152,10 +152,11 @@ from-channel ct cs =
   let
     open ChannelType
     open ChannelSession
+    open Message
   in do
-    m@record { msg = Msg {MT} x f ; msg-ok = msg-ok } ← selective-receive (accept-response (cs .tag) cs)
-    let record { accepted-which = aw ; fields = fields } = convert-response m
-    return₁ (Msg aw fields)
+    m@record { msg = msg ; msg-ok = msg-ok } ← selective-receive (accept-response cs)
+    let record { accepted-which = aw ; fields = fields } = convert-response {session = cs} m
+    return₁ (Msg {MT = msg .MT} aw fields)
 
 
 data IsRequestMessage (IS : InboxShape) : MessageType → Set₁ where

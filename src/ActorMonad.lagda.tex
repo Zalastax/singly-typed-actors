@@ -277,11 +277,12 @@ send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
-data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
-  SendM : {MT : MessageType} →
-          MT ∈ To →
-          All (send-field-content Γ) MT →
-          SendMessage To Γ
+record SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
+  constructor SendM
+  field
+    {MT} : MessageType
+    selected-message-type : MT ∈ To
+    send-fields : All (send-field-content Γ) MT
 \end{code}
 
 Incoming messages differ from outgoing messages in the instantiation of reference fields.
@@ -303,11 +304,12 @@ receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
 
-data Message (To : InboxShape) : Set₁ where
-  Msg : {MT : MessageType} →
-        MT ∈ To →
-        All receive-field-content MT →
-        Message To
+record Message (To : InboxShape) : Set₁ where
+  constructor Msg
+  field
+    {MT} : MessageType
+    received-message-type : MT ∈ To
+    received-fields : All receive-field-content MT
 
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
