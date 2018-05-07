@@ -1,15 +1,38 @@
 \begin{code}
 module Examples.Types where
 
+open import Level using (_⊔_)
+
 open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; false ; true)
 open import Data.Nat using (ℕ ; zero ; suc ; _+_)
 open import Data.Vec using (Vec ; [] ;  _∷_)
 open import Data.List using (List ; [] ; _∷_)
+open import Data.List.All using (All ; [] ; _∷_)
 open import Data.String using (String)
 open import ActorMonad
-open import Membership using (_⊆_ ; _∷_ ; [] ; S ; Z)
+open import Membership using (_∈_; _⊆_ ; _∷_ ; [] ; S ; Z)
 
+record Singleton {a b} (A : Set a) (B : Set b) : Set (a ⊔ b) where
+  field
+    [_] : A → B
+open Singleton {{...}}
+
+instance
+  singletonList : ∀{a}{A : Set a} → Singleton A (List A)
+  singletonList .Singleton.[_] a = a ∷ []
+
+  singletonAll  : ∀{a p} {A : Set a} {P : A → Set p} {x : A} → Singleton (P x) (All P (x ∷ []))
+  singletonAll .Singleton.[_] p = p ∷ []
+
+  singletonMem :  ∀{a} {A : Set a} {x : A} {ys : List A} → Singleton (x ∈ ys) ((x ∷ []) ⊆ ys)
+  singletonMem .Singleton.[_] p = p ∷ []
+
+[_]ˡ : ∀{a}{A : Set a} → A → List A
+[ a ]ˡ = a ∷ []
+
+[_]ᵐ :  ∀{a} {A : Set a} {x : A} {ys : List A} → (x ∈ ys) → ((x ∷ []) ⊆ ys)
+[ p ]ᵐ = p ∷ []
 \end{code}
 
 %<*PropositionalEquality>
@@ -57,12 +80,12 @@ data ActorRef : (InboxType : Set) → Set where
 \begin{code}
 TestInbox : InboxShape
 TestInbox = ( ReferenceType (
-                    (ValueType String ∷ [])
-                    ∷ (ValueType Bool ∷ [])
+                    [ ValueType String ]ˡ
+                    ∷ [ ValueType Bool ]ˡ
                     ∷ [])
                 ∷ ValueType ℕ
                 ∷ [])
-            ∷ (ValueType Bool ∷ [])
+            ∷ [ ValueType Bool ]ˡ
             ∷ []
 \end{code}
 %</ExampleInbox>
@@ -70,11 +93,10 @@ TestInbox = ( ReferenceType (
 %<*Subtyping>
 \begin{code}
 Boolbox : InboxShape
-Boolbox = (ValueType Bool ∷ [])
-          ∷ []
+Boolbox = [ [ ValueType Bool ]ˡ ]ˡ
 
 test-subtyping : Boolbox <: TestInbox
-test-subtyping = (S Z) ∷ []
+test-subtyping = [ S Z ]ᵐ
 \end{code}
 %</Subtyping>
 %<*PartialFunction>
