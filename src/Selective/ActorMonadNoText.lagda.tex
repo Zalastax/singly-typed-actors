@@ -1,15 +1,6 @@
 \begin{code}
 module Selective.ActorMonadNoText where
-open import Membership using (_∈_ ; _⊆_ ; ⊆-refl ; Z ; S ; find-∈)
-
-open import Data.List using (List ; [] ; _∷_ ; _++_)
-open import Data.List.All using (All ; [] ; _∷_)
-open import Data.Unit using (⊤ ; tt)
-open import Data.Bool using (Bool ; true ; false)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
-
-open import Level using (Lift ; lift ; suc ; zero)
-open import Size using (Size ; Size<_ ; ↑_)
+open import Prelude
 
 mutual
   data MessageField : Set₁ where
@@ -137,7 +128,7 @@ data ActorM (i : Size) (IS : InboxShape) where
 open ∞ActorM public
 
 -- coinduction helper for Value
-return₁ : {A : Set (suc zero)} → ∀ {i IS post} → (val : A) → ∞ActorM i IS A (post val) post
+return₁ : {A : Set (lsuc lzero)} → ∀ {i IS post} → (val : A) → ∞ActorM i IS A (post val) post
 return₁ val .force = Return val
 
 -- universe lifting for return₁
@@ -204,5 +195,5 @@ strengthen inc .force = Strengthen inc
 
 ⊠-of-values : List Set → InboxShape
 ⊠-of-values [] = []
-⊠-of-values (x ∷ vs) = (ValueType x ∷ []) ∷ ⊠-of-values vs
+⊠-of-values (x ∷ vs) = ([ ValueType x ]ˡ) ∷ ⊠-of-values vs
 \end{code}

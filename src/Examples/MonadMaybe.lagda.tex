@@ -10,9 +10,9 @@ infixl 1 _>>=_
 
 %<*Monad>
 \begin{code}
-data Maybe : Set → Set₁ where
-  nothing : ∀ {A}  → Maybe A
-  just : ∀ {A} → A → Maybe A
+data Maybe (A : Set) : Set₁ where
+  nothing : Maybe A
+  just    : A → Maybe A
 
 return : ∀ {A} → A → Maybe A
 return = just

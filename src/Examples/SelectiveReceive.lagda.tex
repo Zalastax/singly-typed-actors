@@ -3,20 +3,8 @@
 module Examples.SelectiveReceive where
 
 open import ActorMonad public
-open import Data.List using (List ; _∷_ ; [] ; _++_)
-open import Data.List.All using (All ; _∷_ ; [])
+open import Prelude
 open import Data.List.Properties using (++-assoc ; ++-identityʳ)
-open import Data.Bool using (Bool ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc)
-open import Level using (Level ; Lift ; lift)
-            renaming (zero to lzero ; suc to lsuc)
-open import Size using (Size ; ↑_)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality
-            using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
-open import Membership
-open import Data.Unit using (⊤ ; tt)
-
 
 waiting-refs : ∀ {IS} → (q : List (Message IS)) → ReferenceTypes
 waiting-refs [] = []
@@ -82,10 +70,10 @@ waiting-refs++ (x ∷ xs) ys with (waiting-refs++ xs ys)
 move-received : ∀ {IS} → ∀ pre →
                 (q : List (Message IS)) →
                 (x : Message IS) →
-                  (pre ++ (waiting-refs (q ++ (x ∷ [])))) ⊆
+                  (pre ++ (waiting-refs (q ++ [ x ]ˡ))) ⊆
                   (add-references (pre ++ waiting-refs q) x)
 move-received pre q (Msg {MT} x x₁) rewrite
-                    (waiting-refs++ q (Msg x x₁ ∷ [])) |
+                    (waiting-refs++ q [ Msg x x₁ ]ˡ) |
                     (++-identityʳ (extract-references MT)) =
                     ⊆-trans move-1 move-2
   where
@@ -225,7 +213,7 @@ selective-receive {IS = IS} {Γ} q f = case-of-find (find-split q f)
         handle-receive x with (f x) | (inspect f x)
         handle-receive {i} x  | false | p =
           strengthen (move-received Γ q x) >>
-          selective-receive (q ++ (x ∷ [])) f
+          selective-receive (q ++ [ x ]ˡ) f
         handle-receive x | true | [ p ] =
           strengthen (accept-received Γ q x) >>
           return₁ ret-v
@@ -235,8 +223,10 @@ selective-receive {IS = IS} {Γ} q f = case-of-find (find-split q f)
 \end{code}
 
 \begin{code}
+
+BoolMessage = [ ValueType Bool ]ˡ
 SelectiveTestBox : InboxShape
-SelectiveTestBox = (ValueType Bool ∷ []) ∷ []
+SelectiveTestBox = [ BoolMessage ]ˡ
 
 testActor : ∀ {i} → ActorM i SelectiveTestBox (Lift Bool) [] (λ _ → [])
 testActor = selective-receive [] only-true ∞>>= after-receive
@@ -255,8 +245,8 @@ testActor = selective-receive [] only-true ∞>>= after-receive
     after-receive record { msg = (Msg (S ()) _) }
 
 spawner : ∀ {i} → ActorM i [] ⊤₁ [] (λ _ → [])
-spawner =
-  spawn testActor ∞>>
-  ((Z ![t: Z ] ((lift true) ∷ [])) >>
-  strengthen [])
+spawner = begin do
+  spawn testActor
+  Z ![t: Z ] [ lift true ]ᵃ
+  strengthen []
 \end{code}

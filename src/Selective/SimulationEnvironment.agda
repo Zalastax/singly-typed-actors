@@ -1,23 +1,18 @@
 module Selective.SimulationEnvironment where
-open import Membership using (_∈_ ; find-∈ ; _⊆_)
 open import Selective.ActorMonad
+open import Prelude
+
 open import NatProps
+  using (<-¬≡)
+open import Data.Nat.Properties
+  using (≤-reflexive ; ≤-step)
 
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
-open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀map)
-open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
-open import Data.Nat using (ℕ ; _≟_ ; _<_ ; zero ; suc ; s≤s)
-open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
-open import Data.Unit using (⊤ ; tt)
-open import Data.Bool using (Bool ; true ; false)
+open import Data.Product
+  using (Σ ; _,_ ; _×_ ; Σ-syntax)
 
-open import Level using (Level ; Lift ; lift) renaming (suc to lsuc)
-open import Size using (Size ; Size<_ ; ↑_ ; ∞)
-
-open import Data.Empty using (⊥)
-open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans ; inspect ; [_])
-open import Relation.Unary using (Decidable) renaming (_⊆_ to _⋐_)
+open import Relation.Unary
+  using (Decidable)
+  renaming (_⊆_ to _⋐_)
 
 -- We give every actor and inbox a name.
 -- The internal type of an actor is not important,
@@ -216,7 +211,7 @@ data InboxesValid (store : Store) : ∀ {store'} → Inboxes store' → Set₁ w
 
 -- A name is unused in a store if every inbox has a name that is < than the name
 NameFresh : Store → ℕ → Set₁
-NameFresh store n = All (λ v → name v Data.Nat.< n) store
+NameFresh store n = All (λ v → name v < n) store
   where open NamedInbox
 
 -- If a name is fresh for a store (i.e. all names in the store are < than the name),
@@ -243,7 +238,7 @@ record NameSupplyStream (i : Size) (store : Store) : Set₁ where
 -- if the new name is > than all the names already in the store.
 suc-helper : ∀ {store name IS n} →
              name ↦ IS ∈e store →
-             All (λ v → suc (NamedInbox.name v) Data.Nat.≤ n) store →
+             All (λ v → suc (NamedInbox.name v) ≤ n) store →
              ¬ name ≡ n
 suc-helper zero (px ∷ p) = <-¬≡ px
 suc-helper (suc q) (px ∷ p) = suc-helper q p
@@ -541,7 +536,7 @@ empty-env = record
 -- The actor can't have any known references
 singleton-env : ∀ {IS A post} → ActorM ∞ IS A [] post → Env
 singleton-env {IS} {A} {post} actor = record
-                       { acts = record
+                       { acts = [ record
                                   { inbox-shape = IS
                                   ; A = A
                                   ; references = []
@@ -550,13 +545,13 @@ singleton-env {IS} {A} {post} actor = record
                                   ; post = post
                                   ; computation = record { act = actor ; cont = [] }
                                   ; name = name-supply-singleton .supply .name
-                                  } ∷ []
+                                  } ]ˡ
                        ; blocked = []
                        ; env-inboxes = [] ∷ []
-                       ; store = inbox# 0 [ IS ] ∷ []
-                       ; actors-valid = (record { actor-has-inbox = zero ; references-have-pointer = [] }) ∷ []
+                       ; store = [ inbox# 0 [ IS ] ]ˡ
+                       ; actors-valid = [ record { actor-has-inbox = zero ; references-have-pointer = [] }]ᵃ
                        ; blocked-valid = []
-                       ; messages-valid = [] ∷ []
+                       ; messages-valid =  [] ∷ []
                        ; name-supply = name-supply-singleton .next IS
                        ; blocked-no-progress = []
                        }

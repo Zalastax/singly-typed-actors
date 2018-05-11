@@ -1,29 +1,19 @@
 module Selective.Examples.Bookstore where
 
-open import Selective.ActorMonad public
+open import Selective.ActorMonad
 open import Selective.Examples.Call using (UniqueTag ; call)
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; reverse ; _∷ʳ_ ; length)
-open import Data.List.All using (All ; _∷_ ; [])
-open import Data.Bool using (Bool  ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_ ; pred ; ⌈_/2⌉ ; _≤?_ ; _∸_ ; _≤_ ; z≤n ; s≤s ; _<_ ; _≰_  )
-open import Data.Nat.Properties using (≤-antisym ; ≰⇒>)
-open import Data.Maybe as Maybe using (Maybe ; just ; nothing)
-open import Data.String using (String ; primStringEquality) renaming (_++_ to _||_)
-open import Size
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; cong)
-open import Relation.Nullary using (yes ; no)
-open import Relation.Nullary.Decidable using (⌊_⌋)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-suc ; ⊆++-refl ; translate-⊆)
-open import Data.Unit using (⊤ ; tt)
+open import Prelude
 
-open import Data.List.Properties
-
-open import Category.Monad
+open import Data.Nat
+  using ( _≟_ ; pred ; ⌈_/2⌉ ; _≤?_ ; _∸_ ; _≤_ ; z≤n ; s≤s ; _<_ ; _≰_  )
+open import Data.Nat.Properties
+  using (≤-antisym ; ≰⇒>)
+open import Data.Nat.Show
+  using (show)
+open import Data.String
+  using (primStringEquality)
 
 open import Debug
-open import Data.Nat.Show using (show)
 
 BookTitle = String
 Money = ℕ
@@ -41,13 +31,13 @@ record Book : Set where
 -- ===========
 
 GetQuoteReply : MessageType
-GetQuoteReply = ValueType UniqueTag ∷ ValueType (Maybe Book) ∷ []
+GetQuoteReply = ValueType UniqueTag ∷ [ ValueType (Maybe Book) ]ˡ
 
 GetQuoteReplyInterface : InboxShape
-GetQuoteReplyInterface = GetQuoteReply ∷ []
+GetQuoteReplyInterface = [ GetQuoteReply ]ˡ
 
 GetQuote : MessageType
-GetQuote = ValueType UniqueTag ∷ ReferenceType GetQuoteReplyInterface ∷ ValueType BookTitle ∷ []
+GetQuote = ValueType UniqueTag ∷ ReferenceType GetQuoteReplyInterface ∷ [ ValueType BookTitle ]ˡ
 
 -- ======================
 --  PROPOSE CONTRIBUTION
@@ -59,7 +49,7 @@ record Contribution : Set where
     money : Money
 
 ContributionMessage : MessageType
-ContributionMessage = ValueType Contribution ∷ []
+ContributionMessage = [ ValueType Contribution ]ˡ
 
 -- ===============
 --  AGREE OR QUIT
@@ -69,39 +59,39 @@ data AgreeChoice : Set where
   AGREE QUIT : AgreeChoice
 
 AgreeDecision : MessageType
-AgreeDecision = ValueType AgreeChoice ∷ []
+AgreeDecision = [ ValueType AgreeChoice ]ˡ
 
 -- ================
 --  TRANSFER MONEY
 -- ================
 
 Transfer : MessageType
-Transfer = ValueType BuyerRole ∷ ValueType Contribution ∷ []
+Transfer = ValueType BuyerRole ∷  [ ValueType Contribution ]ˡ
 
 -- ============
 --  INTERFACES
 -- ============
 
 Buyer1-to-Seller : InboxShape
-Buyer1-to-Seller = GetQuote ∷ Transfer ∷ []
+Buyer1-to-Seller = GetQuote ∷ [ Transfer ]ˡ
 
 Buyer2-to-Seller : InboxShape
-Buyer2-to-Seller = AgreeDecision ∷ Transfer ∷ []
+Buyer2-to-Seller = AgreeDecision ∷ [ Transfer ]ˡ
 
 Buyer1-to-Buyer2 : InboxShape
-Buyer1-to-Buyer2 = ContributionMessage ∷ []
+Buyer1-to-Buyer2 = [ ContributionMessage ]ˡ
 
 Buyer2-to-Buyer1 : InboxShape
-Buyer2-to-Buyer1 = AgreeDecision ∷ []
+Buyer2-to-Buyer1 = [ AgreeDecision ]ˡ
 
 SellerInterface : InboxShape
-SellerInterface = GetQuote ∷ AgreeDecision ∷ Transfer ∷ []
+SellerInterface = GetQuote ∷ AgreeDecision ∷ [ Transfer ]ˡ
 
 Buyer1Interface : InboxShape
-Buyer1Interface = (ReferenceType Buyer1-to-Seller ∷ []) ∷ (ReferenceType Buyer1-to-Buyer2 ∷ []) ∷ GetQuoteReply ∷ AgreeDecision ∷ []
+Buyer1Interface = [ ReferenceType Buyer1-to-Seller ]ˡ ∷  [ ReferenceType Buyer1-to-Buyer2 ]ˡ ∷ GetQuoteReply ∷ [ AgreeDecision ]ˡ
 
 Buyer2Interface : InboxShape
-Buyer2Interface = (ReferenceType Buyer2-to-Seller ∷ []) ∷ (ReferenceType Buyer2-to-Buyer1 ∷ []) ∷ ContributionMessage ∷ []
+Buyer2Interface = [ ReferenceType Buyer2-to-Seller ]ˡ ∷ [ ReferenceType Buyer2-to-Buyer1 ]ˡ ∷ [ ContributionMessage ]ˡ
 
 -- ========
 --  COMMON
@@ -112,12 +102,13 @@ book1 = "Crime and Punishment"
 
 transfer-money : ∀ {i IS Seller Γ} →
                  Γ ⊢ Seller →
-                 (Transfer ∷ []) <: Seller →
+                 [ Transfer ]ˡ <: Seller →
                  BuyerRole →
                  Book →
                  Money →
                  ∞ActorM i IS ⊤₁ Γ (λ _ → Γ)
-transfer-money p sub role book money = p ![t: translate-⊆ sub Z ] ((lift role) ∷ (lift (record { book = book ; money = money })) ∷ [])
+transfer-money p sub role book money = p ![t: translate-⊆ sub Z ] ((lift role) ∷ [ lift record { book = book ; money = money } ]ᵃ)
+
 -- ========
 --  SELLER
 -- ========
@@ -145,14 +136,14 @@ seller = begin do
       where
         record { msg = (Msg (S _) _) ; msg-ok = () }
     let maybe-book = find-book known-books title
-    (Z ![t: Z ] (lift tag ∷ (lift maybe-book ∷ [])))
+    (Z ![t: Z ] (lift tag ∷ [ lift maybe-book ]ᵃ))
     after-book-quote maybe-book
   where
     select-quote : MessageFilter SellerInterface
     select-quote (Msg Z _) = true
     select-quote _ = false
     known-books : List Book
-    known-books = record { title = book1 ; price = 37 } ∷ []
+    known-books = [ record { title = book1 ; price = 37 } ]ˡ
     find-book : List Book → BookTitle → Maybe Book
     find-book [] title = nothing
     find-book (book ∷ books) title with (primStringEquality (Book.title book) title)
@@ -189,7 +180,7 @@ seller = begin do
     ... | TooMuchMoney p = "Received too much money for " || Book.title book || ". $" || show (Book.price book) || " - $" || show (Contribution.money c1) || " - $" || show (Contribution.money c2) || " = -$" || show ((Contribution.money c1 + Contribution.money c2) ∸ Book.price book)
     after-book-quote : ∀ {i} →
                        Maybe Book →
-                       ∞ActorM i SellerInterface ⊤₁ (GetQuoteReplyInterface ∷ []) (λ _ → [])
+                       ∞ActorM i SellerInterface ⊤₁ [ GetQuoteReplyInterface ]ˡ (λ _ → [])
     after-book-quote (just book) = do
       lift AGREE ← wait-for-decision
         where
@@ -243,7 +234,7 @@ buyer1 = begin do
                BookTitle →
                ∞ActorM i Buyer1Interface (Lift (Maybe Book)) Γ (λ _ → Γ)
     get-quote p tag title = do
-      record { msg = Msg (S (S Z)) (_ ∷ book ∷ []) ; msg-ok = msg-ok } ← (call p Z tag ((lift title) ∷ []) ((S (S Z)) ∷ []) Z)
+      record { msg = Msg (S (S Z)) (_ ∷ book ∷ []) ; msg-ok = msg-ok } ← call p Z tag [ lift title ]ᵃ [ S (S Z) ]ᵐ Z
         where
           record { msg = (Msg Z (_ ∷ _)) ; msg-ok = () }
           record { msg = (Msg (S Z) (_ ∷ _)) ; msg-ok = () }
@@ -255,7 +246,7 @@ buyer1 = begin do
                        Book →
                        Money →
                        ∞ActorM i Buyer1Interface ⊤₁ Γ (λ _ → Γ)
-    send-contribution p book money = p ![t: Z ] ((lift (record { book = book ; money = money })) ∷ [])
+    send-contribution p book money = p ![t: Z ] [ lift record { book = book ; money = money } ]ᵃ
     select-decision : MessageFilter Buyer1Interface
     select-decision (Msg (S (S (S Z))) _) = true
     select-decision _ = false
@@ -322,12 +313,12 @@ buyer2 = begin do
                           ∞ActorM i Buyer2Interface ⊤₁ Γ (λ _ → Γ)
     handle-contribution seller buyer1 record { book = book ; money = money } with (contribution-is-fair (Book.price book) money)
     ... | true = do
-      (buyer1 ![t: Z ] ((lift AGREE) ∷ []))
-      (seller ![t: Z ] ((lift AGREE) ∷ []))
-      (transfer-money seller (⊆-suc ⊆-refl) Buyer2 book ((Book.price book) ∸ money))
+      buyer1 ![t: Z ] [ lift AGREE ]ᵃ
+      seller ![t: Z ] [ lift AGREE ]ᵃ
+      transfer-money seller (⊆-suc ⊆-refl) Buyer2 book ((Book.price book) ∸ money)
     ... | false = do
-      (buyer1 ![t: Z ] ((lift QUIT) ∷ []))
-      (seller ![t: Z ] ((lift QUIT) ∷ []))
+      buyer1 ![t: Z ] [ lift QUIT ]ᵃ
+      seller ![t: Z ] [ lift QUIT ]ᵃ
 
 -- ============
 --  SUPERVISOR
@@ -338,9 +329,9 @@ bookstore-supervisor = do
   spawn seller
   spawn buyer1
   spawn buyer2
-  Z ![t: Z ] (([ (S (S Z)) ]>: ((S Z) ∷ ((S (S Z)) ∷ []))) ∷ [])
-  Z ![t: S Z ] (([ (S Z) ]>: ((S (S (S Z))) ∷ [])) ∷ [])
-  (S Z) ![t: Z ] (([ (S (S Z)) ]>: (Z ∷ (S (S Z) ∷ []))) ∷ [])
-  (S Z) ![t: S Z ] (([ Z ]>: ((S (S Z)) ∷ [])) ∷ [])
+  Z ![t: Z ]  [ [ (S (S Z)) ]>: ( S Z ∷ [ S (S Z) ]ᵐ)]ᵃ
+  Z ![t: S Z ] [ [ S Z ]>: [ S (S (S Z)) ]ᵐ ]ᵃ
+  (S Z) ![t: Z ] [ [ S (S Z) ]>: (Z ∷ [ S (S Z) ]ᵐ) ]ᵃ
+  (S Z) ![t: S Z ] [ [ Z ]>: [ S (S Z) ]ᵐ ]ᵃ
   (strengthen [])
 

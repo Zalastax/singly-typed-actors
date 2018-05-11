@@ -1,23 +1,13 @@
 module Selective.Simulate where
 
-open import Membership using (_∈_ ; _⊆_ ; All-⊆ ; translate-⊆ ; ⊆-refl)
 open import Selective.ActorMonad public
 open import Selective.SimulationEnvironment
 open import Selective.EnvironmentOperations
+open import Prelude
 
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_)
-open import Data.List.All using (All ; _∷_ ; [] ; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺)
-open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_ ; s≤s)
 open import Data.Nat.Properties using (≤-reflexive ; ≤-step)
-open import Data.Unit using (⊤ ; tt)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
-open import Data.Bool using (Bool ; true ; false)
-
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; trans ; inspect ; [_])
-
-open import Level using (Lift ; lift) renaming (suc to lsuc ; zero to lzero)
-open import Size using (∞ ; Size ; Size<_)
 
 open Actor
 open ValidActor

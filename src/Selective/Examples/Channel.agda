@@ -1,23 +1,7 @@
 module Selective.Examples.Channel where
 
-open import Selective.ActorMonad public
-open import Data.List using (List ; _∷_ ; [] ; _++_ ; map)
-open import Data.List.All using (All ; _∷_ ; []) renaming (map to ∀map)
-open import Data.Bool using (Bool ; if_then_else_ ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_ )
-open import Size
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality
-            using (_≡_ ; refl ; cong ; sym ; inspect ; [_] ; trans)
-open import Membership using (
-              _∈_ ; _⊆_ ; S ; Z ; _∷_ ; []
-              ; ⊆-refl ; ⊆-trans ; ⊆-suc ; translate-⊆
-              ; lookup-all
-              )
-open import Data.Unit using (⊤ ; tt)
-open import Relation.Nullary using (yes ; no)
-open import Relation.Nullary.Decidable using (⌊_⌋)
+open import Selective.ActorMonad
+open import Prelude
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 
 UniqueTag = ℕ

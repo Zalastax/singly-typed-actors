@@ -6,33 +6,12 @@ open import Level using (_⊔_)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; false ; true)
 open import Data.Nat using (ℕ ; zero ; suc ; _+_)
-open import Data.Vec using (Vec ; [] ;  _∷_)
 open import Data.List using (List ; [] ; _∷_)
 open import Data.List.All using (All ; [] ; _∷_)
 open import Data.String using (String)
 open import ActorMonad
 open import Membership using (_∈_; _⊆_ ; _∷_ ; [] ; S ; Z)
-
-record Singleton {a b} (A : Set a) (B : Set b) : Set (a ⊔ b) where
-  field
-    [_] : A → B
-open Singleton {{...}}
-
-instance
-  singletonList : ∀{a}{A : Set a} → Singleton A (List A)
-  singletonList .Singleton.[_] a = a ∷ []
-
-  singletonAll  : ∀{a p} {A : Set a} {P : A → Set p} {x : A} → Singleton (P x) (All P (x ∷ []))
-  singletonAll .Singleton.[_] p = p ∷ []
-
-  singletonMem :  ∀{a} {A : Set a} {x : A} {ys : List A} → Singleton (x ∈ ys) ((x ∷ []) ⊆ ys)
-  singletonMem .Singleton.[_] p = p ∷ []
-
-[_]ˡ : ∀{a}{A : Set a} → A → List A
-[ a ]ˡ = a ∷ []
-
-[_]ᵐ :  ∀{a} {A : Set a} {x : A} {ys : List A} → (x ∈ ys) → ((x ∷ []) ⊆ ys)
-[ p ]ᵐ = p ∷ []
+open import Singleton
 \end{code}
 
 %<*PropositionalEquality>
@@ -49,7 +28,7 @@ definitional = refl
 
 %<*Cong>
 \begin{code}
-cong : ∀ {a} {A B : Set a} {m n : A} → (f : A → B) → m ≡ n → f m ≡ f n
+cong : {A B : Set} {m n : A} → (f : A → B) → m ≡ n → f m ≡ f n
 cong f refl = refl
 
 
@@ -78,22 +57,23 @@ data ActorRef : (InboxType : Set) → Set where
 
 %<*ExampleInbox>
 \begin{code}
+BoolMessage = [ ValueType Bool ]ˡ
+StringMessage = [ ValueType String ]ˡ
+
+OtherInbox : InboxShape
+OtherInbox = StringMessage ∷ [ BoolMessage ]ˡ
+RefNatMessage : MessageType
+RefNatMessage = ReferenceType OtherInbox ∷ [ ValueType ℕ ]ˡ
+
 TestInbox : InboxShape
-TestInbox = ( ReferenceType (
-                    [ ValueType String ]ˡ
-                    ∷ [ ValueType Bool ]ˡ
-                    ∷ [])
-                ∷ ValueType ℕ
-                ∷ [])
-            ∷ [ ValueType Bool ]ˡ
-            ∷ []
+TestInbox = RefNatMessage ∷ [ BoolMessage ]ˡ
 \end{code}
 %</ExampleInbox>
 
 %<*Subtyping>
 \begin{code}
 Boolbox : InboxShape
-Boolbox = [ [ ValueType Bool ]ˡ ]ˡ
+Boolbox = [ BoolMessage ]ˡ
 
 test-subtyping : Boolbox <: TestInbox
 test-subtyping = [ S Z ]ᵐ

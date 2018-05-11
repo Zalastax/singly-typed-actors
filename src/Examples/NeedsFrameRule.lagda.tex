@@ -1,25 +1,24 @@
 \begin{code}
 module Examples.NeedsFrameRule where
 open import ActorMonad
-open import Data.Nat using (ℕ)
-open import Membership using (_∈_ ; Z)
-open import Data.List using (List ; [] ; _∷_ ; _++_)
-open import Data.List.All using (All ; [] ; _∷_)
-open import Size using (Size ; Size<_ ; ↑_)
-open import Level using (Lift ; lift)
+open import Prelude
 
 \end{code}
 %<*send-nat>
 \begin{code}
+
+NatMessage : MessageType
+NatMessage = [ ValueType ℕ ]ˡ
+
 send-nat : ∀ {i IS ToIS pre} →
                (canSendTo : ToIS ∈ pre) →
-               ((ValueType ℕ ∷ []) ∈ ToIS) →
+               (NatMessage ∈ ToIS) →
                ∞ActorM (↑ i) IS ⊤₁ pre (λ _ → pre)
-send-nat canSendTo p = canSendTo ![t: p ] (lift 42 ∷ [])
+send-nat canSendTo p = canSendTo ![t: p ] [ lift 42 ]ᵃ
 
 send-nat-frame : ∀ {i IS ToIS} →
-                 ((ValueType ℕ ∷ []) ∈ ToIS) →
-                 ∞ActorM (↑ i) IS ⊤₁ (ToIS ∷ []) (λ _ → ToIS ∷ [])
-send-nat-frame p = Z ![t: p ] (lift 42 ∷ [])
+                 (NatMessage ∈ ToIS) →
+                 ∞ActorM (↑ i) IS ⊤₁ [ ToIS ]ˡ (λ _ → [ ToIS ]ˡ)
+send-nat-frame p = Z ![t: p ] ([ lift 42 ]ᵃ)
 \end{code}
 %</send-nat>

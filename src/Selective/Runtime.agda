@@ -1,16 +1,10 @@
 module Selective.Runtime where
 open import Selective.Simulate
 open import Selective.SimulationEnvironment
+open import Prelude
 
-open import Data.List using (List ; _∷_ ; [] ; map ; length)
-open import Data.List.All using (All ; _∷_ ; [])
-open import Data.Nat using (ℕ ; zero ; suc)
 open import Data.Nat.Show using (show)
-open import Data.String using (String ; _++_)
-open import Data.Unit using (⊤ ; tt)
-
 open import Coinduction using ( ♯_ ; ♭)
-open import Size using (∞)
 import IO
 open ∞Trace
 
@@ -40,10 +34,10 @@ show-env : Env → String
 show-env env =
   let count = count-blocked env
       open BlockedCount
-  in "There are " ++ show (count .return-count) ++ " finished actors, " ++ show (count .receive-count) ++ " receiving actors, and " ++ show (count .selective-count) ++ " selecting actors"
+  in "There are " || show (count .return-count) || " finished actors, " || show (count .receive-count) || " receiving actors, and " || show (count .selective-count) || " selecting actors"
 
 show-final-step : ℕ → String
-show-final-step n = "Done after " ++ (show n) ++ " steps."
+show-final-step n = "Done after " || (show n) || " steps."
 
 -- run-env continously runs the simulation of an environment
 -- and transforms the steps taken into output to the console.
@@ -52,7 +46,7 @@ run-env env = loop 1 ((simulate env) .force)
   where
     loop : ℕ → Trace ∞ → IO.IO ⊤
     loop n (TraceStop env _) = ♯ IO.putStrLn (show-final-step n) IO.>> ♯ IO.putStrLn (show-env env)
-    loop n (x ∷ xs) = ♯ IO.putStrLn ("Step " ++ show n ) IO.>> ♯ loop (suc n) (xs .force)
+    loop n (x ∷ xs) = ♯ IO.putStrLn ("Step " || show n ) IO.>> ♯ loop (suc n) (xs .force)
 
 run-env-silent : Env → IO.IO ⊤
 run-env-silent env = loop 1 ((simulate env) .force)

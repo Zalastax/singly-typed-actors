@@ -6,7 +6,7 @@ module Examples.Peano where
 \begin{code}
 data ℕ : Set where
     zero : ℕ
-    suc : ℕ → ℕ    
+    suc : ℕ → ℕ
 
 data _≤_ : ℕ → ℕ → Set where
     z≤n : {n : ℕ} → zero ≤ n

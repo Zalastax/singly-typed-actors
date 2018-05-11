@@ -1,17 +1,14 @@
 \begin{code}
 module Examples.Monad where
-open import Data.Bool using (Bool ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-
+open import Prelude
 infixl 1 _>>=_
 \end{code}
 
 %<*Monad>
 \begin{code}
-data Monad : Set → Set₁ where
-  return : ∀ {A} → A → Monad A
-  _>>=_ : ∀ {A B} → Monad A → (A → Monad B) → Monad B
+data Monad (B : Set) : Set₁ where
+  return : B → Monad B
+  _>>=_ : ∀ {A} → Monad A → (A → Monad B) → Monad B
 \end{code}
 %</Monad>
 

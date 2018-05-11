@@ -1,24 +1,13 @@
 module Selective.Examples.Chat where
 
-open import Selective.ActorMonad public
+open import Selective.ActorMonad
 open import Selective.Examples.Call using (UniqueTag ; call)
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; reverse ; _∷ʳ_ ; length)
-open import Data.List.All using (All ; _∷_ ; [])
-open import Data.Bool using (Bool  ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_ ; pred)
-open import Data.Maybe as Maybe using (Maybe ; just ; nothing)
-open import Data.String using (String) renaming (_++_ to _||_)
-open import Size
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; cong)
-open import Relation.Nullary using (yes ; no)
-open import Relation.Nullary.Decidable using (⌊_⌋)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-suc ; ⊆++-refl)
-open import Data.Unit using (⊤ ; tt)
+open import Prelude
+  hiding (Maybe)
+open import Data.Maybe as Maybe
+  hiding (map)
 
 open import Data.List.Properties
-
 open import Category.Monad
 
 open import Debug
@@ -45,16 +34,16 @@ data JoinRoomStatus : Set where
   JRS-SUCCESS JRS-FAIL : RoomName → JoinRoomStatus
 
 JoinRoomSuccessReply : MessageType
-JoinRoomSuccessReply = ValueType UniqueTag ∷ ValueType JoinRoomSuccess ∷ ReferenceType Client-to-Room ∷ []
+JoinRoomSuccessReply = ValueType UniqueTag ∷ ValueType JoinRoomSuccess ∷ [ ReferenceType Client-to-Room ]ˡ
 
 JoinRoomFailReply : MessageType
-JoinRoomFailReply = ValueType UniqueTag ∷ ValueType JoinRoomFail ∷ []
+JoinRoomFailReply = ValueType UniqueTag ∷ [ ValueType JoinRoomFail ]ˡ
 
 JoinRoomReplyInterface : InboxShape
-JoinRoomReplyInterface = (JoinRoomSuccessReply ∷ JoinRoomFailReply ∷ []) ++ Room-to-Client
+JoinRoomReplyInterface = JoinRoomSuccessReply ∷ JoinRoomFailReply ∷ Room-to-Client
 
 JoinRoom : MessageType
-JoinRoom = ValueType UniqueTag ∷ ReferenceType JoinRoomReplyInterface ∷ ValueType RoomName ∷ ValueType ClientName ∷ []
+JoinRoom = ValueType UniqueTag ∷ ReferenceType JoinRoomReplyInterface ∷ ValueType RoomName ∷ [ ValueType ClientName ]ˡ
 
 -- =============
 --  CREATE ROOM
@@ -64,10 +53,10 @@ data CreateRoomResult : Set where
   CR-SUCCESS CR-EXISTS : RoomName → CreateRoomResult
 
 CreateRoomReply : MessageType
-CreateRoomReply = ValueType UniqueTag ∷ ValueType CreateRoomResult ∷ []
+CreateRoomReply = ValueType UniqueTag ∷ [ ValueType CreateRoomResult ]ˡ
 
 CreateRoom : MessageType
-CreateRoom = ValueType UniqueTag ∷ ReferenceType (CreateRoomReply ∷ []) ∷ ValueType RoomName ∷ []
+CreateRoom = ValueType UniqueTag ∷ ReferenceType [ CreateRoomReply ]ˡ ∷ [ ValueType RoomName ]ˡ
 
 -- ============
 --  LIST ROOMS
@@ -77,35 +66,33 @@ RoomList : Set
 RoomList = List RoomName
 
 ListRoomsReply : MessageType
-ListRoomsReply = ValueType UniqueTag ∷ ValueType RoomList ∷ []
+ListRoomsReply = ValueType UniqueTag ∷ [ ValueType RoomList ]ˡ
 
 ListRooms : MessageType
-ListRooms = ValueType UniqueTag ∷ ReferenceType (ListRoomsReply ∷ []) ∷ []
+ListRooms = ValueType UniqueTag ∷ [ ReferenceType [ ListRoomsReply ]ˡ ]ˡ
 
 -- ===
 --
 -- ===
 
 Client-to-RoomManager : InboxShape
-Client-to-RoomManager = JoinRoom ∷ CreateRoom ∷ ListRooms ∷ []
+Client-to-RoomManager = JoinRoom ∷ CreateRoom ∷ [ ListRooms ]ˡ
 
 RoomManagerInterface : InboxShape
 RoomManagerInterface = Client-to-RoomManager
 
 GetRoomManagerReply : MessageType
-GetRoomManagerReply = ValueType UniqueTag ∷ ReferenceType RoomManagerInterface ∷ []
+GetRoomManagerReply = ValueType UniqueTag ∷ [ ReferenceType RoomManagerInterface ]ˡ
 
 GetRoomManager : MessageType
-GetRoomManager = ValueType UniqueTag ∷ ReferenceType (GetRoomManagerReply ∷ []) ∷ []
+GetRoomManager = ValueType UniqueTag ∷ [ ReferenceType [ GetRoomManagerReply ]ˡ ]ˡ
 
 RoomSupervisorInterface : InboxShape
-RoomSupervisorInterface = GetRoomManager ∷ []
+RoomSupervisorInterface = [ GetRoomManager ]ˡ
 
 ClientSupervisorInterface : InboxShape
 ClientSupervisorInterface =
-  (ReferenceType RoomSupervisorInterface ∷ [])
-  ∷ GetRoomManagerReply
-  ∷ []
+  [ ReferenceType RoomSupervisorInterface ]ˡ ∷ [ GetRoomManagerReply ]ˡ
 
 
 --
@@ -119,25 +106,25 @@ record ChatMessageContent : Set where
     message : String
 
 ChatMessage : MessageType
-ChatMessage = ValueType ChatMessageContent ∷ []
+ChatMessage = [ ValueType ChatMessageContent ]ˡ
 
 LeaveRoom : MessageType
-LeaveRoom = ValueType ClientName ∷ []
+LeaveRoom = [ ValueType ClientName ]ˡ
 
-Client-to-Room = ChatMessage ∷ LeaveRoom ∷ []
+Client-to-Room = ChatMessage ∷ [ LeaveRoom ]ˡ
 
-Room-to-Client = ChatMessage ∷ []
+Room-to-Client = [ ChatMessage ]ˡ
 
 AddToRoom : MessageType
-AddToRoom = ValueType ClientName ∷ ReferenceType Room-to-Client ∷ []
+AddToRoom = ValueType ClientName ∷ [ ReferenceType Room-to-Client ]ˡ
 
 RoomManager-to-Room : InboxShape
-RoomManager-to-Room = AddToRoom ∷ []
+RoomManager-to-Room = [ AddToRoom ]ˡ
 
 RoomInstanceInterface : InboxShape
 RoomInstanceInterface = Client-to-Room ++ RoomManager-to-Room
 
-ClientInterface = (ReferenceType RoomManagerInterface ∷ []) ∷ CreateRoomReply ∷ ListRoomsReply ∷ JoinRoomReplyInterface
+ClientInterface = [ ReferenceType RoomManagerInterface ]ˡ ∷ CreateRoomReply ∷ ListRoomsReply ∷ JoinRoomReplyInterface
 
 -- ======
 --  ROOM
@@ -199,7 +186,7 @@ room-instance = begin (loop (record { clients = [] }))
         send-loop l (x ∷ r) with (x ≟ name)
         ... | (yes _) = recurse l r x
         ... | (no _) = let p = build-pointer l (x ∷ r) Z
-          in debug ("Sending to " || show x || ": " || message) (p ![t: Z ] (((lift (chat-from name message: message)) ∷ []))) >> recurse l r x
+          in debug ("Sending to " || show x || ": " || message) (p ![t: Z ] [ lift (chat-from name message: message) ]ᵃ ) >> recurse l r x
         recurse l r x rewrite ++-temp-fix l r x = send-loop (l ∷ʳ x) r
     handle-message : ∀ {i} → (rs : RoomState) →
                      (m : Message RoomInstanceInterface) →
@@ -273,23 +260,23 @@ room-manager = begin (loop (record { rooms = [] }))
                         (Maybe (Γ ⊢ RoomInstanceInterface)) →
                         ∞ActorM i RoomManagerInterface ⊤₁ Γ (λ _ → Γ)
     handle-room-join tag room-name client-name cp (just rp) = do
-      cp ![t: Z ] ((lift tag) ∷ ((lift (JR-SUCCESS room-name)) ∷ (([ rp ]>: (Z ∷ ((S Z) ∷ []))) ∷ [])))
-      rp ![t: S (S Z) ] (lift client-name ∷ ([ cp ]>: ((S (S Z)) ∷ [])) ∷ [])
+      cp ![t: Z ] ((lift tag) ∷ (lift (JR-SUCCESS room-name)) ∷ [ [ rp ]>: (Z ∷ [ S Z ]ᵐ) ]ᵃ)
+      rp ![t: S (S Z) ] ((lift client-name) ∷ [ [ cp ]>: [ S (S Z) ]ᵐ ]ᵃ)
     handle-room-join tag room-name client-name p nothing =
-      p ![t: S Z ] (lift tag ∷ (lift (JR-FAIL room-name) ∷ []))
+      p ![t: S Z ] (lift tag ∷ [ lift (JR-FAIL room-name) ]ᵃ)
     handle-create-room : ∀ {i} →
                          (rms : RoomManagerState) →
                          UniqueTag →
                          RoomName →
-                         Maybe (((CreateRoomReply ∷ []) ∷ rms-to-context rms) ⊢ RoomInstanceInterface) →
-                         ∞ActorM i RoomManagerInterface RoomManagerState ((CreateRoomReply ∷ []) ∷ rms-to-context rms) rms-to-context
+                         Maybe (([ CreateRoomReply ]ˡ ∷ rms-to-context rms) ⊢ RoomInstanceInterface) →
+                         ∞ActorM i RoomManagerInterface RoomManagerState ([ CreateRoomReply ]ˡ ∷ rms-to-context rms) rms-to-context
     handle-create-room rms tag name (just x) = do
-      (Z ![t: Z ] ((lift tag) ∷ ((lift (CR-EXISTS name)) ∷ [])))
-      (strengthen (⊆-suc ⊆-refl))
-      (return₁ rms)
+      Z ![t: Z ] ((lift tag) ∷ [ lift (CR-EXISTS name) ]ᵃ)
+      strengthen (⊆-suc ⊆-refl)
+      return₁ rms
     handle-create-room rms tag name nothing = do
-      (Z ![t: Z ] ((lift tag) ∷ ((lift (CR-SUCCESS name)) ∷ [])))
-      (strengthen (⊆-suc ⊆-refl))
+      Z ![t: Z ] ((lift tag) ∷ [ lift (CR-SUCCESS name) ]ᵃ)
+      strengthen (⊆-suc ⊆-refl)
       spawn room-instance
       let
         rms' : RoomManagerState
@@ -310,7 +297,7 @@ room-manager = begin (loop (record { rooms = [] }))
       handle-create-room state tag name p
     -- List rooms
     handle-message state (Msg (S (S Z)) (tag ∷ _ ∷ [])) = do
-      (Z ![t: Z ] ((lift tag) ∷ (lift (RoomManagerState.rooms state) ∷ [])))
+      (Z ![t: Z ] ((lift tag) ∷ [(lift (RoomManagerState.rooms state) )]ᵃ))
       (strengthen (⊆-suc ⊆-refl))
       (return₁ state)
     handle-message state (Msg (S (S (S ()))) _)
@@ -327,7 +314,7 @@ room-manager = begin (loop (record { rooms = [] }))
 -- =================
 
 rs-context : TypingContext
-rs-context = RoomManagerInterface ∷ []
+rs-context = [ RoomManagerInterface ]ˡ
 
 -- room-supervisor spawns the room-manager
 -- and provides an interface for getting a reference to the current room-manager
@@ -341,7 +328,7 @@ room-supervisor = begin do
     provide-manager-instance .force = begin do
       (Msg Z (tag ∷ _ ∷ [])) ← receive
         where (Msg (S ()) _)
-      (Z ![t: Z ] (lift tag ∷ (([ (S Z) ]>: ⊆-refl) ∷ [])))
+      Z ![t: Z ] (lift tag ∷ [ [ S Z ]>: ⊆-refl ]ᵃ)
       (strengthen (⊆-suc ⊆-refl))
       provide-manager-instance
 
@@ -353,7 +340,7 @@ busy-wait : ∀ {i IS Γ} → ℕ → ∞ActorM i IS ⊤₁ Γ (λ _ → Γ)
 busy-wait zero = return _
 busy-wait (suc n) = return tt >> busy-wait n
 
-client-get-room-manager : ∀ {i} → ∞ActorM i ClientInterface ⊤₁ [] (λ _ → RoomManagerInterface ∷ [])
+client-get-room-manager : ∀ {i} → ∞ActorM i ClientInterface ⊤₁ [] (λ _ → [ RoomManagerInterface ]ˡ)
 client-get-room-manager = do
   record { msg = Msg Z _} ← (selective-receive (λ {
     (Msg Z x₁) → true
@@ -370,7 +357,7 @@ client-create-room : ∀ {i } →
                      RoomName →
                      ∞ActorM i ClientInterface (Lift CreateRoomResult) Γ (λ _ → Γ)
 client-create-room p tag name = do
-  record { msg = (Msg (S Z) (_ ∷ cr ∷ [])) } ← (call p (S Z) tag ((lift name) ∷ []) ((S Z) ∷ []) Z)
+  record { msg = (Msg (S Z) (_ ∷ cr ∷ [])) } ← (call p (S Z) tag [ lift name ]ᵃ [ S Z ]ᵐ Z)
     where
       record { msg = (Msg Z (_ ∷ _)) ; msg-ok = () }
       record { msg = (Msg (S (S _)) _) ; msg-ok = () }
@@ -390,7 +377,7 @@ client-join-room : ∀ {i Γ} →
                    ∞ActorM i ClientInterface (Lift JoinRoomStatus) Γ (add-if-join-success Γ)
 client-join-room p tag room-name client-name = do
     self
-    S p ![t: Z ] ((lift tag) ∷ (([ Z ]>: ⊆-suc (⊆-suc (⊆-suc ⊆-refl))) ∷ (lift room-name) ∷ ((lift client-name) ∷ [])))
+    S p ![t: Z ] (lift tag ∷ (([ Z ]>: ⊆-suc (⊆-suc (⊆-suc ⊆-refl))) ∷ (lift room-name) ∷ [ lift client-name ]ᵃ))
     (strengthen (⊆-suc ⊆-refl))
     m ← (selective-receive (select-join-reply tag))
     handle-message m
@@ -419,7 +406,7 @@ client-send-message : ∀ {i  Γ} →
                       ClientName →
                       String →
                       ∞ActorM i ClientInterface ⊤₁ Γ (λ _ → Γ)
-client-send-message p client-name message = p ![t: Z ] ((lift (chat-from client-name message: message)) ∷ [])
+client-send-message p client-name message = p ![t: Z ] [ lift (chat-from client-name message: message) ]ᵃ
 
 client-receive-message : ∀ {i Γ} →
                          ∞ActorM i ClientInterface (Lift ChatMessageContent) Γ (λ _ → Γ)
@@ -444,7 +431,7 @@ client-leave-room : ∀ {i Γ} →
                     Γ ⊢ Client-to-Room →
                     ClientName →
                     ∞ActorM i ClientInterface ⊤₁ Γ (λ _ → Γ)
-client-leave-room p name = p ![t: S Z ] ((lift name) ∷ [])
+client-leave-room p name = p ![t: S Z ] [ lift name ]ᵃ
 
 debug-chat : {a : Level} {A : Set a} → ClientName → ChatMessageContent → A → A
 debug-chat client-name content = let open ChatMessageContent
@@ -588,21 +575,21 @@ client-supervisor = begin do
       return _
     spawn-clients : ∀ {i} → ∞ActorM i ClientSupervisorInterface ⊤₁ cs-context (λ _ → cs-context)
     spawn-clients = do
-      (spawn client1)
-      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
+      spawn client1
+      Z ![t: Z ] [ [ S Z ]>: ⊆-refl ]ᵃ
       (strengthen (⊆-suc ⊆-refl))
       (spawn client2)
-      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
+      Z ![t: Z ] [ [ S Z ]>: ⊆-refl ]ᵃ
       (strengthen (⊆-suc ⊆-refl))
       (spawn client3)
-      Z ![t: Z ] (([ S Z ]>: ⊆-refl) ∷ [])
+      Z ![t: Z ] [ [ S Z ]>: ⊆-refl ]ᵃ
       (strengthen (⊆-suc ⊆-refl))
 
 -- chat-supervisor is the top-most actor
 -- it spawns and connects the ClientRegistry to the RoomRegistry
 chat-supervisor : ∀ {i} → ∞ActorM i [] ⊤₁ [] (λ _ → [])
 chat-supervisor = do
-    (spawn room-supervisor)
-    (spawn client-supervisor)
-    (Z ![t: Z ] (([ (S Z) ]>: ⊆-refl) ∷ []))
-    (strengthen [])
+    spawn room-supervisor
+    spawn client-supervisor
+    Z ![t: Z ] [ [ S Z ]>: ⊆-refl ]ᵃ
+    strengthen []

@@ -1,19 +1,10 @@
 module Selective.Examples.ActiveObjects where
 
-open import Selective.ActorMonad public
-open import Selective.Examples.Channel public
-open import Selective.Examples.Call2 public
-open import Membership using (
-  _∈_ ; _⊆_ ; S ; Z ; _∷_ ; []
-  ; ⊆-refl ; ⊆-trans ; ⊆-suc ; translate-⊆
-  ; lookup-all ; ⊆++-l-refl
-  )
-open import Data.List using (List ; _∷_ ; [] ; _++_ ; map)
-open import Data.List.All using (All ; _∷_ ; []) renaming (map to ∀map)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _≟_ )
+open import Selective.ActorMonad
+open import Selective.Examples.Channel
+open import Selective.Examples.Call2
+open import Prelude
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Size
 
 open ChannelType
 open ChannelInitiation
@@ -119,7 +110,7 @@ invoke-active-method ac (Msg x f) state = invoke f (ac .methods) (ac .handlers) 
                                MT ∈ active-request-type ci
     translate-invoke-pointer {record { request-tagged = HasTag+Ref MT ∷ _ }} Z = Z
     translate-invoke-pointer {record { response = response ; request-tagged = _ ∷ rt }} (S p) =
-      let rec = translate-invoke-pointer {record { request = _ ; response = response ; request-tagged = rt }} p 
+      let rec = translate-invoke-pointer {record { request = _ ; response = response ; request-tagged = rt }} p
       in S rec
     translate-send-pointer : ∀ {ct MT} →
                                MT ∈ active-reply-type ct →
@@ -147,11 +138,11 @@ invoke-active-method ac (Msg x f) state = invoke f (ac .methods) (ac .handlers) 
              (cis : List ChannelInitiation) →
              All (active-method (active-inbox-shape (ac .methods)) (ac .state-type) (ac .vars)) cis →
              MT ∈ active-inbox-shape cis →
-             ∞ActorM i (active-inbox-shape (ac .methods)) (ac .state-type) (add-references-static (ac .vars state) MT) (λ st → add-references-static (ac .vars st) MT) 
+             ∞ActorM i (active-inbox-shape (ac .methods)) (ac .state-type) (add-references-static (ac .vars state) MT) (λ st → add-references-static (ac .vars st) MT)
     invoke _ _ [] ()
     invoke f (ci ∷ _) (_ ∷ _) x with (∈++ (ci .request) _ x)
     invoke f (ci ∷ _) (handler ∷ _) x | Left q =
-      let irm = lookup-all q (ci .request-tagged) 
+      let irm = lookup-all q (ci .request-tagged)
       in invoke' f ci handler q irm
     invoke f (_ ∷ cis) (_ ∷ handlers) x | Right q = invoke f cis handlers q
 

@@ -1,16 +1,7 @@
 module Selective.Examples.Fibonacci where
 
-open import Selective.ActorMonad public
-open import Data.List using (List ; _∷_ ; [])
-open import Data.List.All using (All ; _∷_ ; [])
-open import Data.Bool using (Bool  ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_)
-open import Size
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl ; ⊆-suc)
-open import Data.Unit using (⊤ ; tt)
+open import Selective.ActorMonad
+open import Prelude
 
 open import Debug
 open import Data.Nat.Show using (show)
@@ -19,30 +10,26 @@ data End : Set where
   END : End
 
 ℕ-message : MessageType
-ℕ-message = ValueType ℕ ∷ []
+ℕ-message = [ ValueType ℕ ]ˡ
 
 End-message : MessageType
-End-message = ValueType End ∷ []
+End-message = [ ValueType End ]ˡ
 
 Client-to-Server : InboxShape
-Client-to-Server = ℕ-message ∷ End-message ∷ []
+Client-to-Server = ℕ-message ∷ [ End-message ]ˡ
 
 Server-to-Client : InboxShape
-Server-to-Client = ℕ-message ∷ []
+Server-to-Client = [ ℕ-message ]ˡ
 
 
 ServerInterface : InboxShape
-ServerInterface =
-  (ReferenceType Server-to-Client ∷ [])
-  ∷ Client-to-Server
+ServerInterface = [ ReferenceType Server-to-Client ]ˡ ∷ Client-to-Server
 
 ClientInterface : InboxShape
-ClientInterface =
-  (ReferenceType Client-to-Server ∷ [])
-  ∷ Server-to-Client
+ClientInterface = [ ReferenceType Client-to-Server ]ˡ ∷ Server-to-Client
 
 ServerRefs : TypingContext
-ServerRefs = Server-to-Client ∷ []
+ServerRefs = [ Server-to-Client ]ˡ
 
 constServerRefs : {A : Set₁} → (A → TypingContext)
 constServerRefs _ = ServerRefs
@@ -75,11 +62,11 @@ server = wait-for-client ∞>> run-fibonacci 1
       Next n ← wait-for-value
         where Done → return _
       let next = x + n
-      (Z ![t: Z ] (lift next ∷ []))
+      Z ![t: Z ] [ lift next ]ᵃ
       (run-fibonacci next)
 
 ClientRefs : TypingContext
-ClientRefs = Client-to-Server ∷ []
+ClientRefs = [ Client-to-Server ]ˡ
 
 constClientRefs : {A : Set₁} → (A → TypingContext)
 constClientRefs _ = ClientRefs
@@ -105,16 +92,16 @@ client = wait-for-server ∞>> run 10 0
           record { msg = (Msg (S (S ())) x₁) }
       return n
     run : ℕ → ℕ → ∀ {i} → ∞ActorM i ClientInterface ⊤₁ ClientRefs constClientRefs
-    run zero x = Z ![t: S Z ] ((lift END) ∷ [])
+    run zero x = Z ![t: S Z ] [ lift END ]ᵃ
     run (suc todo) x .force = begin do
       (Z ![t: Z ] ((lift x) ∷ []))
       (lift n) ← wait-for-value
       let next = x + n
       run (debug (show next) todo) next
 
-spawner : ∀ {i} → ∞ActorM i [] ⊤₁ [] (λ _ → ClientInterface ∷ ServerInterface ∷ [])
+spawner : ∀ {i} → ∞ActorM i [] ⊤₁ [] (λ _ → ClientInterface ∷ [ ServerInterface ]ˡ)
 spawner = do
-  (spawn server)
-  (spawn client)
-  (S Z ![t: Z ] (([ Z ]>: ⊆-suc ⊆-refl) ∷ []))
-  (Z ![t: Z ] (([ S Z ]>: ⊆-suc ⊆-refl) ∷ []))
+  spawn server
+  spawn client
+  S Z ![t: Z ] [ [ Z ]>: ⊆-suc ⊆-refl ]ᵃ
+  Z ![t: Z ] [ [ S Z ]>: ⊆-suc ⊆-refl ]ᵃ

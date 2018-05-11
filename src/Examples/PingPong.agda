@@ -1,16 +1,7 @@
 module Examples.PingPong where
 
 open import ActorMonad public
-open import Data.List using (List ; _∷_ ; [])
-open import Data.List.All using (All ; _∷_ ; [])
-open import Data.Bool using (Bool ; if_then_else_ ; false ; true)
-open import Data.Nat using (ℕ ; zero ; suc)
-open import Size
-open import Level using (Lift ; lift) renaming (zero to lzero ; suc to lsuc)
-open import Data.List.Any using (here ; there)
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl)
-open import Membership using (_∈_ ; _⊆_ ; S ; Z ; _∷_ ; [] ; ⊆-refl)
-open import Data.Unit using (⊤ ; tt)
+open import Prelude
 
 -- An example including three actors: spawner, pinger, ponger
 --
@@ -29,19 +20,31 @@ Spawnbox : InboxShape
 Spawnbox = []
 
 mutual
-  PingValues = Bool ∷ []
-  PongValues = ℕ ∷ []
+  PingValues = [ Bool ]ˡ
+  PongValues = [ ℕ ]ˡ
 
-  PingRefs : ReferenceTypes
-  PingRefs = (⊠-of-values PongValues) ∷ []
-  PongRefs : ReferenceTypes
-  PongRefs = ⊠-of-values PingValues ∷ []
+  PingRefs : TypingContext
+  PingRefs = [ ⊠-of-values PongValues ]ˡ
+  PongRefs : TypingContext
+  PongRefs = [ ⊠-of-values PingValues ]ˡ
+
+  PongReferenceMessage : MessageType
+  PongReferenceMessage = [ ReferenceType (⊠-of-values PongValues) ]ˡ
+
+  BoolMessage : MessageType
+  BoolMessage = [ ValueType Bool ]ˡ
 
   Pingbox : InboxShape
-  Pingbox = (ValueType Bool ∷ []) ∷ (ReferenceType (⊠-of-values PongValues) ∷ []) ∷ []
+  Pingbox = BoolMessage ∷ [ PongReferenceMessage ]ˡ
+
+  PingReferenceMessage : MessageType
+  PingReferenceMessage = [ ReferenceType (⊠-of-values PingValues) ]ˡ
+
+  NatMessage : MessageType
+  NatMessage = [ ValueType ℕ ]ˡ
 
   Pongbox : InboxShape
-  Pongbox = (ValueType ℕ ∷ []) ∷ (ReferenceType (⊠-of-values PingValues) ∷ []) ∷ []
+  Pongbox = NatMessage ∷ [ PingReferenceMessage ]ˡ
 
 
 constPingrefs : {A : Set₁} → (A → TypingContext)
@@ -53,7 +56,7 @@ pingMainActor i A = ∞ActorM i Pingbox A PingRefs constPingrefs
 mutual
   pingReceive : ∀ {i} (msg : Message Pingbox) → ∞ActorM i Pingbox (Lift Bool) (add-references PingRefs msg) constPingrefs
   pingReceive (Msg Z (b ∷ [])) = return b
-  pingReceive (Msg (S Z) _) = strengthen (S Z ∷ []) >> loopTillPingValue
+  pingReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPingValue
   pingReceive (Msg (S (S ())) x₁)
 
   loopTillPingValue : ∀ {i} → pingMainActor i (Lift Bool)
@@ -70,7 +73,7 @@ pinger .force = loopTillPong ∞>> pingMain 0
       }))
     pingMain : ∀ {i} → ℕ → pingMainActor i ⊤₁
     pingMain n .force = loopTillPingValue ∞>>= λ
-      { (lift false) → (Z ![t: Z ] (lift n ∷ [])) >> pingMain (suc n)
+      { (lift false) → (Z ![t: Z ] ( [ lift n ]ᵃ)) >> pingMain (suc n)
       ; (lift true) → return _}
 
 constPongrefs : {A : Set₁} → (A → TypingContext)
@@ -82,13 +85,13 @@ pongMainActor i A = ∞ActorM i Pongbox A PongRefs constPongrefs
 mutual
   pongReceive : ∀ {i} (msg : Message Pongbox) → ∞ActorM i Pongbox (Lift ℕ) (add-references PongRefs msg) constPongrefs
   pongReceive (Msg Z (n ∷ [])) = return n
-  pongReceive (Msg (S Z) _) = strengthen (S Z ∷ []) >> loopTillPongValue
+  pongReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPongValue
   pongReceive (Msg (S (S ())) _)
   loopTillPongValue : ∀ {i} → pongMainActor i (Lift ℕ)
   loopTillPongValue .force = receive ∞>>= pongReceive
 
 ponger : ∀ {i} → ∞ActorM (↑ i) Pongbox ⊤₁ [] constPongrefs
-ponger .force = loopTillPing ∞>> ((Z ![t: Z ] ((lift false) ∷ [])) >> pongMain)
+ponger .force = loopTillPing ∞>> ((Z ![t: Z ] ([ lift false ]ᵃ)) >> pongMain)
   where
     loopTillPing : ∀ {i} → ∞ActorM i Pongbox ⊤₁ [] constPongrefs
     loopTillPing .force = receive ∞>>= λ {
@@ -98,14 +101,13 @@ ponger .force = loopTillPing ∞>> ((Z ![t: Z ] ((lift false) ∷ [])) >> pongMa
       }
     pongMain : ∀ {i} → pongMainActor i ⊤₁
     pongMain .force = loopTillPongValue ∞>>= λ {
-      (lift 10) → Z ![t: Z ] ((lift true) ∷ [])
-      ; (lift n) → (Z ![t: Z ] ((lift false) ∷ [])) >> pongMain
+      (lift 10) → Z ![t: Z ] [ lift true ]ᵃ
+      ; (lift n) → Z ![t: Z ] [ lift false ]ᵃ >> pongMain
       }
 
--- TODO: this needs to look prettier
-spawner : ∀ {i} → ∞ActorM i Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ Pongbox ∷ [])
+spawner : ∀ {i} → ∞ActorM i Spawnbox ⊤₁ [] (λ _ → Pingbox ∷ [ Pongbox ]ˡ)
 spawner = do
   spawn∞ ponger
   spawn∞ pinger
-  Z ![t: S Z ] (([ (S Z) ]>: (Z ∷ [])) ∷ [])
-  S Z ![t: S Z ] (([ Z ]>: (Z ∷ [])) ∷ [])
+  Z ![t: S Z ] [ [ S Z ]>: [ Z ]ᵐ ]ᵃ
+  S Z ![t: S Z ] [ [ Z ]>: [ Z ]ᵐ ]ᵃ

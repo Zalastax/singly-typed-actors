@@ -1,24 +1,12 @@
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
-open import Membership using (_∈_ ; _⊆_ ; [] ; _∷_ ; Z ; S ; lookup-parallel ; lookup-parallel-≡ ; translate-∈ ; x∈[]-⊥ ; translate-⊆ ; ⊆-trans ; find-∈ ; All-⊆)
+open import Prelude
 
-open import Data.List using (List ; _∷_ ; [] ; map ; _++_ ; drop)
-open import Data.List.All using (All ; _∷_ ; []; lookup) renaming (map to ∀map)
 open import Data.List.All.Properties using (++⁺ ; drop⁺)
 open import Data.List.Properties using (map-++-commute)
-open import Data.List.Any using (Any ; here ; there)
-open import Data.Nat using (ℕ ; zero ; suc ; _≟_ ; _<_)
 open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
-open import Data.Unit using (⊤ ; tt)
-open import Data.Empty using (⊥ ; ⊥-elim)
-
-open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; sym ; cong ; cong₂ ; trans)
-open import Relation.Nullary using (Dec ; yes ; no ; ¬_)
-
-open import Level using (Lift ; lift)
-open import Size using (∞)
 
 open Actor
 open ValidActor
@@ -247,11 +235,11 @@ top-actor-to-back : Env → Env
 top-actor-to-back env with (acts env) | (actors-valid env)
 top-actor-to-back env | [] | _ = env
 top-actor-to-back env | x ∷ acts | (y ∷ prfs) = record
-                             { acts = acts Data.List.++ x ∷ []
+                             { acts = acts ++  [ x ]ˡ
                              ; blocked = blocked env
                              ; env-inboxes = env-inboxes env
                              ; store = store env
-                             ; actors-valid = ++⁺ prfs (y ∷ [])
+                             ; actors-valid = ++⁺ prfs [ y ]ᵃ
                              ; blocked-valid = blocked-valid env
                              ; messages-valid = messages-valid env
                              ; name-supply = name-supply env
@@ -577,7 +565,10 @@ block-focused env@record {
 -- Takes a named message and a proof that the named message is valid for the store.
 -- Values are valid for any store and references need a proof that the pointer is valid.
 add-message : {S : InboxShape} → {store : Store} → (message : NamedMessage S) → message-valid store message → (ValidMessageList store S → ValidMessageList store S)
-add-message message valid vml = record { inbox = inbox vml ++ (message ∷ []) ; valid = ++⁺ (ValidMessageList.valid vml) (valid ∷ []) }
+add-message message valid vml = record {
+  inbox = inbox vml ++ [ message ]ˡ
+  ; valid = ++⁺ (ValidMessageList.valid vml) [ valid ]ᵃ
+  }
 
 -- Removes the next message from an inbox.
 -- This is a no-op if there are no messages in the inbox.
