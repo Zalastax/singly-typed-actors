@@ -50,8 +50,10 @@ Name = ℕ
 \end{code}
 %<*ActorRef>
 \begin{code}
-data ActorRef : (InboxType : Set) → Set where
-    create-actor-ref : ∀ {A} → Name → ActorRef A
+record ActorRef (InboxType : Set) : Set where
+  constructor create-actor-ref
+  field
+    name : Name
 \end{code}
 %</ActorRef>
 

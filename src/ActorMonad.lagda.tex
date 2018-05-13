@@ -135,37 +135,31 @@ providing an index into \AgdaBound{B} for every element in \AgdaBound{A}.
 %</InboxShapeSubtype>
 
 %<*ActorPrecondition>
-It is crucial that actor references are completely unforgeable if type safety is to be preserved.
-If an actor is allowed to manufacture references on its own,
-every guarantee we have about message types becomes invalid and unusable.
-Allowing either the name or the type of a reference to be controlled in user space
-makes it possible to create a reference to an inbox that is incompatible with the underlying inbox,
-making it possible to send messages that will not be understood by the receiver.
+A reference to an actor is a name that is used to look up that actor's inbox in order to write or read from it.
+We assign types to references in order to statically guarantee that we will only send messages to an inbox which the receiving actor can understand.
+The property to maintain for this to hold is that the type of the reference must be a subtype of the inbox it references:
 
-In other settings we could simply have hidden the constructor of actor references,
-i.e. by moving it to an internal module or marking it as abstract.
-That tactic is simple and pragmatic,
-but does not work in a formal setting like Agda without using postulates.
-This posed a difficult problem in our implementation
-since we realized that we would need to make a major diversion from how
-references are handled by \textcite{DBLP:conf/ecoop/FowlerLW17}.
+\[
+  \begin{array}{@{}c@{}}
+    S <: T \quad inbox : \overrightarrow{T} \quad name \mapsto inbox \\
+    \hline
+    \operatorname{Reference}(name) : S
+\end{array}  
+\]
 
-When \textcite{DBLP:conf/ecoop/FowlerLW17} type terms,
-values and references are treated the same way.
-Since our model is an embedding in Agda,
-this would mean that both references and values are normal Agda terms.
-Initially we tried to follow this route by modelling references as a name tagged with a type.
+The desire to statically check that references are well-typed has affected the design of \ourlang a lot.
+We first tried an encoding of references where a name is simply tagged with a type:
 \AgdaCatch{Examples/Types}{ActorRef}
-One quickly realizes that this data-type is easily forged and, as said,
-hiding the constructor is not a good enough option.
-We also realized that it would not be possible to maintain any proofs of references being valid
-if we went this route, a problem related to how we incorporate Agda functions in the syntax.
-The solution that seemed to fit best in the setting of Agda
-is to treat references separately from values.
+This encoding is intuitive and simple, but it does not capture $S <: T$, nor does it capture $name \mapsto inbox$.
+Using this encoding thus requires finding a way to maintain additional proofs.
+
+To maintain the necessary proofs of references being valid requires that we encode more things in the type system.
+The solution that seem to fit best in the setting of Agda is to make a bigger distinction between references and values.
 Values are kept as normal Agda terms, only restricted under Agda's usual typing rules.
-References, on the other hand, are treated as variables that are maintained explicitly in the model.
-Maintaining the references manually in the model is enough for guaranteeing that references
-are valid, type correct, and unforgeable.
+References, on the other hand, are treated as variables that are maintained explicitly in the model,
+encoded in the type parameter of each actor.
+This technique makes it possible to maintain type correctness of references,
+as long as the effect every actor operation has on the reference variables is carefully designed.
 
 We type check references in the standard way of maintaining a variable typing context.
 A typing context associates variables to types,
@@ -219,7 +213,7 @@ _⊢_ : TypingContext → InboxShape → Set₁
 %</ActorPrecondition>
 
 %<*ReferenceSubtype>
-For inboxes the subtype relation $A <: B$ says that
+For inboxes, the subtype relation $A <: B$ says that
 every message in $A$ is also a valid message in $B$.
 It should therefore be possible to downcast a reference of type $B$ to a reference of type $A$,
 since every message sent to a reference of type $A$ will be a valid message in $B$.
@@ -263,7 +257,7 @@ For values, the instantiation of a field is simply an Agda term of the type spec
 For references, the instantiation is not a simple Agda term,
 but rather a variable in the reference context.
 The type of the selected reference variable must be compatible with the type that the receiver expects,
-\ie the types have to have the correct subtype relation.
+\ie they must have the correct subtype relation.
 
 \begin{code}
 
@@ -385,7 +379,7 @@ Return and bind of the actor monad use the invariants that are expected from any
 monad, which is explained in section \ref{parameterized_monads}.
 Bind chains together potentially infinite sub-computations,
 and we can see that bind preserves the size (observation depth) $i$.
-Agda implements a sort of subtyping for sizes,
+Agda implements subtyping for sizes,
 so computations of different sizes can still be composed via bind.
 
 We don't give the constructors \AgdaInductiveConstructor{Return}
