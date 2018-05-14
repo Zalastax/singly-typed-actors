@@ -24,16 +24,14 @@ open import Relation.Unary
 -- For ℕ we can create new values using suc,
 -- and can prove that it is unused by proving that every
 -- previously used name is < than the new name.
-Name = ℕ
+
+-- See definition of Name below 
 
 -- Named inboxes are just an inbox shape and a name.
 -- We use this representation to separate the shape of the store and
 -- the actual storing of inboxes with messages.
-record NamedInbox : Set₁ where
-  constructor inbox#_[_]
-  field
-    name : Name
-    shape : InboxShape
+
+-- See definition of NamedInbox below
 
 -- The store is a list of named inboxes.
 -- This only describes the shape of the store and does not contain any messages.
@@ -45,7 +43,26 @@ record NamedInbox : Set₁ where
 -- meaning that you can only insert duplicate keys
 -- if the value InboxShape is the same as the already stored value.
 -- Inserting duplicate keys is thus pointless and is not done anywhere in the code.
+
+-- See definition of Store below
+
+
+\end{code}
+%<*Store>
+\begin{code}
+  
+Name = ℕ
+
+record NamedInbox : Set₁ where
+  constructor inbox#_[_]
+  field
+    name : Name
+    shape : InboxShape
+
 Store = List NamedInbox
+\end{code}
+%</Store>
+\begin{code}
 
 -- A pointer into the store.
 -- This is a proof that the name points to an inbox shape in the store.
@@ -106,10 +123,6 @@ record Actor : Set₂ where
     computation : ActorState ∞ inbox-shape A pre post
     name        : Name
 
-named-field-content : MessageField → Set
-named-field-content (ValueType A) = A
-named-field-content (ReferenceType Fw) = Name
-
 -- We can look up which inbox a reference refers to when a message is sent.
 -- We can however not add the reference to the actor immediately,
 -- since the reference should only be added when the message is received.
@@ -119,6 +132,15 @@ named-field-content (ReferenceType Fw) = Name
 -- The decision to use names for references and pointers, rather than just ∈,
 -- makes it possible to prove that a sent message containing a reference
 -- does not need to be modified when more actors are added.
+
+\end{code}
+%<*NamedMessage>
+\begin{code}
+
+named-field-content : MessageField → Set
+named-field-content (ValueType A) = A
+named-field-content (ReferenceType Fw) = Name
+
 record NamedMessage (To : InboxShape): Set₁ where
   constructor NamedM
   field
@@ -126,14 +148,10 @@ record NamedMessage (To : InboxShape): Set₁ where
     named-message-type : MT ∈ To
     named-fields : All named-field-content MT
 
-unname-message : ∀ {S} → NamedMessage S → Message S
-unname-message (NamedM x fields) = Msg x (do-the-work fields)
-  where
-    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
-    do-the-work {[]} nfc = []
-    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
-    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
-
+\end{code}
+%</NamedMessage>
+%<*Inboxes>
+\begin{code}
 Inbox : InboxShape → Set₁
 Inbox is = List (NamedMessage is)
 
@@ -141,6 +159,16 @@ data Inboxes : (store : Store) → Set₁ where
   [] : Inboxes []
   _∷_ : ∀ {store name inbox-shape} → Inbox inbox-shape →
     (inboxes : Inboxes store) → Inboxes (inbox# name [ inbox-shape ] ∷ store)
+\end{code}
+%</Inboxes>
+\begin{code}
+unname-message : ∀ {S} → NamedMessage S → Message S
+unname-message (NamedM x fields) = Msg x (do-the-work fields)
+  where
+    do-the-work : ∀ {MT} → All named-field-content MT → All receive-field-content MT
+    do-the-work {[]} nfc = []
+    do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
+    do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
 
 data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {name : Name} : (store : Store) → (Inboxes store) → (name ↦ inbox-shape ∈e store) → Set₁ where
   zero : ∀ {store} {inbs : Inboxes store} →
@@ -153,7 +181,9 @@ data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {nam
 -- This is used both for proving that every actor has an inbox,
 -- and for proving that every reference known by an actor has an inbox
 has-inbox : Store → Actor → Set
-has-inbox store actor = Actor.name actor ↦ Actor.inbox-shape actor ∈e store
+has-inbox store actor =
+  let open Actor
+  in actor .name ↦ actor .inbox-shape ∈e store
 
 
 inbox-for-actor : ∀ {store} (inbs : Inboxes store) (actor : Actor) (p : has-inbox store actor) (inb : Inbox (Actor.inbox-shape actor)) → Set₁
@@ -230,7 +260,9 @@ record NameSupplyStream (i : Size) (store : Store) : Set₁ where
   coinductive
   field
     supply : NameSupply store
-    next : (IS : InboxShape) → {j : Size< i} → NameSupplyStream j (inbox# supply .name [ IS ] ∷ store)
+    next : (IS : InboxShape) →
+           {j : Size< i} →
+           NameSupplyStream j (inbox# supply .name [ IS ] ∷ store)
 
 
 -- helps show that all the names in the store are still valid if we add a new name on top,

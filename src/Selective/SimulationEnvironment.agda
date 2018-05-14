@@ -154,8 +154,9 @@ data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {nam
 -- This is used both for proving that every actor has an inbox,
 -- and for proving that every reference known by an actor has an inbox
 has-inbox : Store → Actor → Set
-has-inbox store actor = Actor.name actor ↦ Actor.inbox-shape actor ∈e store
-
+has-inbox store actor =
+  let open Actor
+  in actor .name ↦ actor .inbox-shape ∈e store
 
 inbox-for-actor : ∀ {store} (inbs : Inboxes store) (actor : Actor) (p : has-inbox store actor) (inb : Inbox (Actor.inbox-shape actor)) → Set₁
 inbox-for-actor {store} inbs actor p inb = InboxForPointer inb store inbs p
