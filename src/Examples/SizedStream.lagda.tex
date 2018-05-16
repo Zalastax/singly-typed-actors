@@ -9,7 +9,7 @@ record Stream (i : Size) (A : Set) : Set where
   coinductive
   field
     head : A
-    tail : ∀ {j : Size< i} → Stream j A
+    tail : (j : Size< i) → Stream j A
 \end{code}
 %</Stream>
 \begin{code}
@@ -17,20 +17,20 @@ open Stream
 \end{code}
 %<*SkipTwice>
 \begin{code}
-skip-twice : {i : Size} → Stream (↑ (↑ i)) ℕ → Stream i ℕ
-skip-twice s = s .tail .tail
+skip-twice : (i : Size) → Stream (↑ (↑ i)) ℕ → Stream i ℕ
+skip-twice i s = s .tail (↑ i) .tail i
 \end{code}
 %</SkipTwice>
 %<*Fib>
 \begin{code}
-zipWith : {i : Size} {A B C : Set} → (A → B → C) →
+zipWith : (i : Size) {A B C : Set} → (A → B → C) →
           Stream i A → Stream i B → Stream i C
-(zipWith f xs ys) .head = f (xs .head) (ys .head)
-(zipWith f xs ys) .tail = zipWith f (xs .tail) (ys .tail)
+(zipWith i f xs ys) .head = f (xs .head) (ys .head)
+(zipWith i f xs ys) .tail j = zipWith j f (xs .tail j) (ys .tail j)
 
-fib : {i : Size} → Stream i ℕ
-fib .head = 0
-fib .tail .head = 1
-fib .tail .tail = zipWith _+_ fib (fib .tail)
+fib : (i : Size) → Stream i ℕ
+fib i .head = 0
+fib i .tail j .head = 1
+fib i .tail j .tail k = zipWith k _+_ (fib k) (fib j .tail k)
 \end{code}
 %</Fib>

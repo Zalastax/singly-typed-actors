@@ -1,3 +1,4 @@
+\begin{code}
 module Simulate where
 
 open import ActorMonad public
@@ -94,7 +95,7 @@ reduce-spawn env@record {
     env'' : Env
     env'' = top-actor-to-back env'
     actor' : Actor
-    actor' = add-reference actor new-store-entry (Return _ ⟶ cont)
+    actor' = add-reference actor new-store-entry (Return (lift tt) ⟶ cont)
     valid'' : ValidActor (env'' .store) actor'
     valid'' = add-reference-valid RefAdded valid' [p: zero ][handles: ⊆-refl ]
     env''' : Env
@@ -105,12 +106,12 @@ reduce-send : {act : Actor} → (env : Env) → Focus act env →
               ActorAtConstructor Send act →
               Env
 reduce-send env@record {
-  acts = actor@record { computation = Send {ToIS = ToIS} canSendTo (SendM tag fields) ⟶ cont } ∷ rest
+  acts = actor@record { computation = Send {ToIS = ToIS} Γ⊢ToIS (SendM tag fields) ⟶ cont } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
   } Focused AtSend =
   let
     to-reference : FoundReference (store env) ToIS
-    to-reference = lookup-reference-act actor-valid canSendTo
+    to-reference = lookup-reference-act actor-valid Γ⊢ToIS
     namedFields = name-fields-act (store env) actor fields actor-valid
     actor' : Actor
     actor' = replace-actorM actor (Return _ ⟶ cont)
@@ -253,7 +254,13 @@ reduce-strengthen env@record {
              actor-valid'
   in env'
 
-reduce : {act : Actor} → (env : Env) → Focus act env → Env
+\end{code}
+%<*reduceHeader>
+\begin{code}
+reduce : {actor : Actor} → (env : Env) → Focus actor env → Env
+\end{code}
+%</reduceHeader>
+\begin{code}
 reduce env@record { acts = record { computation = (Return val ⟶ []) } ∷ _ } Focused =
   reduce-unbound-return env Focused AtReturn (NoContinuation {v = val})
 reduce env@record { acts = record { computation = (Return val ⟶ (_ ∷ _)) } ∷ _ } Focused =
@@ -278,3 +285,5 @@ simulate env@record { acts = _ ∷ _ ; actors-valid = _ ∷ _ } = keep-stepping 
     open ∞Trace
     keep-stepping : Env → ∞Trace ∞
     keep-stepping env .force = env ∷ simulate env
+
+\end{code}

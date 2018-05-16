@@ -1,0 +1,50 @@
+\begin{code}
+module Examples.SimpleActor where
+
+open import ActorMonad public
+open import Prelude
+
+ℕ₁ : Set₁
+ℕ₁ = Lift ℕ
+
+\end{code}
+%<*All>
+\begin{code}
+TickTock : MessageType
+TickTock = [ ValueType Bool ]ˡ
+
+TickTocker : InboxShape
+TickTocker = [ TickTock ]ˡ
+
+tick-tocker : ∀ {i} → ∞ActorM (↑ i) TickTocker ⊤₁ [] (λ _ → [])
+tick-tocker .force = (do
+  self
+  Msg Z (b ∷ []) ← receive
+    where Msg (S ()) _
+  let
+    Γ = [ TickTocker ]ˡ
+    to : Γ ⊢ TickTocker
+    to = Z
+    tag : TickTock ∈ TickTocker
+    tag = Z
+    fields : All (send-field-content Γ) TickTock
+    fields = lift (not b) ∷ []
+  to ![t: tag ] fields
+  strengthen []) ∞>>=
+  λ _  → tick-tocker
+
+spawner : ∀ {i} → ∞ActorM i [] ℕ₁ [] (λ _ → [ TickTocker ]ˡ)
+spawner = do
+  spawn∞ tick-tocker
+  let
+    Γ = [ TickTocker ]ˡ
+    to : Γ ⊢ TickTocker
+    to = Z
+    tag : TickTock ∈ TickTocker
+    tag = Z
+    fields : All (send-field-content Γ) TickTock
+    fields = lift true ∷ []
+  to ![t: tag ] fields
+  return 42
+\end{code}
+%</All>

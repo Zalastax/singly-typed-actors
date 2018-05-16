@@ -2,7 +2,7 @@ module Prelude where
 
 -- Simple data
 open import Data.Bool public
-  using (Bool ; false ; true)
+  using (Bool ; false ; true ; not)
 open import Data.Empty public
   using (⊥ ; ⊥-elim)
 open import Data.Nat public

@@ -1,3 +1,4 @@
+\begin{code}
 module EnvironmentOperations where
 open import ActorMonad
 open import SimulationEnvironment
@@ -463,18 +464,20 @@ lift-references [] refs refl = record {
   ; contained-eq-inboxes = refl
   }
 lift-references (_∷_ {y} {xs} x₁ subs) refs refl with (lift-references subs refs refl)
-... | q  = record {
+... | q  =
+  let
+    contained-el : NamedInbox
+    contained-el = lookup-parallel x₁ refs shape refl
+    contained-el-shape = shape contained-el
+    contained-el-ok : y ≡ contained-el-shape
+    contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
+  in record {
   subset-inbox = x₁ ∷ subs
   ; contained = contained-el ∷ contained q
   ; subset = (translate-∈ x₁ refs shape refl) ∷ (subset q)
   ; contained-eq-inboxes = combine contained-el-shape y (map shape (contained q)) xs (sym contained-el-ok) (contained-eq-inboxes q)
   }
   where
-    contained-el : NamedInbox
-    contained-el = lookup-parallel x₁ refs shape refl
-    contained-el-shape = shape contained-el
-    contained-el-ok : y ≡ contained-el-shape
-    contained-el-ok = lookup-parallel-≡ x₁ refs shape refl
     combine : (a b : InboxShape) → (as bs : TypingContext) → (a ≡ b) → (as ≡ bs) → (a ∷ as ≡ b ∷ bs)
     combine a .a as .as refl refl = refl
 
@@ -594,13 +597,24 @@ unname-field : ∀ {x} → named-field-content x → receive-field-content x
 unname-field {ValueType x₁} nfc = nfc
 unname-field {ReferenceType x₁} nfc = _
 
+\end{code}
+%<*named-inboxes>
+\begin{code}
 extract-inboxes : ∀ {MT} → All named-field-content MT → List NamedInbox
 extract-inboxes [] = []
-extract-inboxes (_∷_ {ValueType _} _ ps) = extract-inboxes ps
-extract-inboxes (_∷_ {ReferenceType x} name ps) = inbox# name [ x ] ∷ extract-inboxes ps
+extract-inboxes (_∷_ {ValueType _} _ ps) =
+  let rec = extract-inboxes ps
+  in  rec
+extract-inboxes (_∷_ {ReferenceType x} name ps) =
+  let rec = extract-inboxes ps
+  in  inbox# name [ x ] ∷ rec
 
 named-inboxes : ∀ {S} → (nm : NamedMessage S) → List NamedInbox
-named-inboxes (NamedM x x₁) = extract-inboxes x₁
+named-inboxes (NamedM tag fields) = extract-inboxes fields
+\end{code}
+%</named-inboxes>
+\begin{code}
+
 
 reference-names : {MT : MessageType} → All named-field-content MT → List Name
 reference-names [] = []
@@ -664,3 +678,5 @@ make-pointers-compatible store _ refs refl (_∷_ {ValueType x} px fields) rhp =
 make-pointers-compatible store _ refs refl (_∷_ {ReferenceType x} px fields) rhp =
   let foundFw = lookup-reference _ refs rhp refl (actual-is-sendable px)
   in FhpR (make-pointer-compatible store x refs px rhp foundFw) ∷ (make-pointers-compatible store _ refs refl fields rhp)
+
+\end{code}

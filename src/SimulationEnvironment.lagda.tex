@@ -25,7 +25,7 @@ open import Relation.Unary
 -- and can prove that it is unused by proving that every
 -- previously used name is < than the new name.
 
--- See definition of Name below 
+-- See definition of Name below
 
 -- Named inboxes are just an inbox shape and a name.
 -- We use this representation to separate the shape of the store and
@@ -50,7 +50,7 @@ open import Relation.Unary
 \end{code}
 %<*Store>
 \begin{code}
-  
+
 Name = ℕ
 
 record NamedInbox : Set₁ where
@@ -455,16 +455,24 @@ data ActorHasNoContinuation : Actor → Set₂ where
       ; name = name
       })
 
-data IsBlocked (store : Store) (inbs : Inboxes store) (actor : Actor) : Set₂ where
+\end{code}
+%<*IsBlocked>
+\begin{code}
+data IsBlocked (store : Store)
+               (inboxes : Inboxes store)
+               (actor : Actor) : Set₂ where
   BlockedReturn :
     ActorAtConstructor Return actor →
     ActorHasNoContinuation actor →
-    IsBlocked store inbs actor
+    IsBlocked store inboxes actor
   BlockedReceive :
     ActorAtConstructor Receive actor →
     (p : has-inbox store actor) →
-    InboxForPointer [] store inbs p →
-    IsBlocked store inbs actor
+    InboxForPointer [] store inboxes p →
+    IsBlocked store inboxes actor
+\end{code}
+%</IsBlocked>
+\begin{code}
 
 -- The environment is a list of actors and inboxes,
 -- with a proof that every ector is valid in the context of said list of inboxes
