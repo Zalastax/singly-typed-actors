@@ -242,17 +242,18 @@ reduce-selective-with-message : {act : Actor} → (env : Env) → Focus act env 
 reduce-selective-with-message env@record {
   acts = actor@record { computation = SelectiveReceive filter ⟶ cont } ∷ rest
   ; actors-valid = actor-valid ∷ rest-valid
-  } Focused AtSelective point inb amv ifa (HasMessage {split = split} {ok}) =
+  } Focused AtSelective point inb amv ifa (HasMessage split ok) =
   let updated = update-inbox (env .store) (env .env-inboxes) (env .messages-valid) (actor-valid .actor-has-inbox) (remove-found-message filter)
       unblock-split = unblock-actors updated (env .blocked) (env .blocked-valid) (env .blocked-no-progress)
-      received-nm = SplitList.el split
+      open SplitList
+      received-nm = split .el
       added-references = named-inboxes received-nm
       received-message = unname-message received-nm
       received-valid : message-valid (env .store) received-nm
       received-valid = split-all-el inb amv split
       adds-correct-references : map shape added-references ++ (actor .pre) ≡ add-references (actor .pre) received-message
       adds-correct-references = add-references++ received-nm received-valid (actor .pre)
-      new-continuation = Return (record { msg = received-message ; msg-ok = ok }) ⟶ cont
+      new-continuation = Return sm: received-message [ ok ] ⟶ cont
       act' : Actor
       act' = add-references-rewrite actor added-references {received-message} adds-correct-references new-continuation
       act-valid' : ValidActor (env .store) act'
@@ -277,8 +278,9 @@ reduce-selective-without-message : {act : Actor} → (env : Env) → Focus act e
                                  (aac : ActorAtConstructor Selective act) →
                                  (point : has-inbox (env .store) act) →
                                  ∀ inbox →
+                                 {ps : All (misses-filter (filter-named (selected-filter act aac))) inbox} →
                                  inbox-for-actor (env .env-inboxes) act point inbox →
-                                 InboxInFilterState {filter = filter-named (selected-filter act aac)} inbox Nothing →
+                                 InboxInFilterState inbox (Nothing ps) →
                                  Env
 reduce-selective-without-message env Focused AtSelective point inbox ifa iifs =
   block-focused env Focused (BlockedSelective AtSelective point inbox ifa iifs)
@@ -295,8 +297,8 @@ reduce-selective env@record {
   where
     open GetInbox
     choose-reduction : (gi : GetInbox (env .store) (env .env-inboxes) (actor-valid .actor-has-inbox)) → FoundInList (gi .messages) (filter-named filter) → Env
-    choose-reduction gi (Found split x) = reduce-selective-with-message env Focused AtSelective _ (gi .messages) (gi .valid) (gi .right-inbox) (HasMessage {split = split} {x})
-    choose-reduction gi Nothing = reduce-selective-without-message env Focused AtSelective _ (gi .messages) (gi .right-inbox) IsEmpty
+    choose-reduction gi (Found split x) = reduce-selective-with-message env Focused AtSelective _ (gi .messages) (gi .valid) (gi .right-inbox) (HasMessage split x)
+    choose-reduction gi (Nothing ps) = reduce-selective-without-message env Focused AtSelective _ (gi .messages) (gi .right-inbox) (IsEmpty ps)
 
 reduce-strengthen : {act : Actor} → (env : Env) → Focus act env →
                     ActorAtConstructor Strengthen act →

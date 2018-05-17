@@ -17,19 +17,28 @@ record SplitList {a : Level} {A : Set a} (ls : List A) : Set (lsuc a) where
     tails : List A
     is-ls : (heads) ++ (el ∷ tails) ≡ ls
 
+matches-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
+matches-filter f v = f v ≡ true
+
+misses-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
+misses-filter f v = f v ≡ false
+
 data FoundInList {a : Level} {A : Set a}
-                 (ls : List A) (f : A → Bool) : Set (lsuc a) where
+                 (ls : List A)
+                 (f : A → Bool) :
+                 Set (lsuc a) where
   Found : (split : SplitList ls) →
-          (f (SplitList.el split) ≡ true) →
+          (matches-filter f (SplitList.el split)) →
           FoundInList ls f
-  Nothing : FoundInList ls f
+  Nothing : All (misses-filter f) ls →
+            FoundInList ls f
 
 find-split : {a : Level} {A : Set a}
              (ls : List A) (f : A → Bool) →
              FoundInList ls f
-find-split [] f = Nothing
+find-split [] f = Nothing []
 find-split (x ∷ ls) f with (f x) | (inspect f x)
-... | false | p = add-x (find-split ls f)
+... | false | [ neq ] = add-x (find-split ls f)
   where
     add-x : FoundInList ls f → FoundInList (x ∷ ls) f
     add-x (Found split el-is-ok) = Found (record {
@@ -39,7 +48,7 @@ find-split (x ∷ ls) f with (f x) | (inspect f x)
       ; is-ls = cong (_∷_ x) (is-ls split)
       }) el-is-ok
       where open SplitList
-    add-x Nothing = Nothing
+    add-x (Nothing ps) = Nothing (neq ∷ ps)
 ... | true | [ eq ] = Found (record {
       heads = []
       ; el = x
@@ -199,7 +208,7 @@ selective-receive {IS = IS} {Γ} q f = case-of-find (find-split q f)
         ; msg-ok = x
         ; waiting = (heads split) ++ (tails split)
         })
-    case-of-find Nothing .force =
+    case-of-find (Nothing ps) .force =
       receive ∞>>=
       handle-receive
       where

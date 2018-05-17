@@ -1,3 +1,4 @@
+\begin{code}
 module Selective.SimulationEnvironment where
 open import Selective.ActorMonad
 open import Prelude
@@ -441,26 +442,47 @@ data ActorHasNoContinuation : Actor → Set₂ where
       ; name = name
       })
 
+\end{code}
+%<*SplitList>
+\begin{code}
 record SplitList {a : Level} {A : Set a} (ls : List A) : Set (lsuc a) where
   field
     heads : List A
     el : A
     tails : List A
     is-ls : (heads) ++ (el ∷ tails) ≡ ls
+\end{code}
+%</SplitList>
+%<*FoundInList>
+\begin{code}
+matches-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
+matches-filter f v = f v ≡ true
 
-data FoundInList {a : Level} {A : Set a} (ls : List A) (f : A → Bool) : Set (lsuc a) where
-  Found : (split : SplitList ls) → (f (SplitList.el split) ≡ true) → FoundInList ls f
-  Nothing : FoundInList ls f
+misses-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
+misses-filter f v = f v ≡ false
+
+data FoundInList {a : Level} {A : Set a}
+                 (ls : List A)
+                 (f : A → Bool) :
+                 Set (lsuc a) where
+  Found : (split : SplitList ls) →
+          (matches-filter f (SplitList.el split)) →
+          FoundInList ls f
+  Nothing : All (misses-filter f) ls →
+            FoundInList ls f
+\end{code}
+%</FoundInList>
+\begin{code}
 
 find-split : {a : Level} {A : Set a} (ls : List A) (f : A → Bool) → FoundInList ls f
-find-split [] f = Nothing
+find-split [] f = Nothing []
 find-split (x ∷ ls) f with (f x) | (inspect f x)
-... | false | p = add-x (find-split ls f)
+... | false | [ neq ] = add-x (find-split ls f)
   where
     add-x : FoundInList ls f → FoundInList (x ∷ ls) f
     add-x (Found split x₁) = Found (record { heads = x ∷ heads split ; el = el split ; tails = tails split ; is-ls = cong (_∷_ x) (is-ls split) }) x₁
       where open SplitList
-    add-x Nothing = Nothing
+    add-x (Nothing ps) = Nothing (neq ∷ ps)
 ... | true | [ eq ] = Found (record { heads = [] ; el = x ; tails = ls ; is-ls = refl }) eq
 
 split-all-el : ∀ {a p} {A : Set a} {P : A → Set p} (ls : List A) → All P ls → (sl : SplitList ls) → (P (SplitList.el sl))
@@ -478,8 +500,8 @@ data InboxInState {S : InboxShape} : InboxState → Inbox S → Set₁ where
   HasMessage : {nm : NamedMessage S} {rest : Inbox S} → InboxInState NonEmpty (nm ∷ rest)
 
 data InboxInFilterState {S : InboxShape} {filter : NamedMessage S → Bool} (inbox : Inbox S) : FoundInList inbox filter → Set₁ where
-  IsEmpty : InboxInFilterState inbox Nothing
-  HasMessage : {split : SplitList inbox} {p : filter (SplitList.el split) ≡ true} → InboxInFilterState inbox (Found split p)
+  IsEmpty : ∀ ps → InboxInFilterState inbox (Nothing ps)
+  HasMessage : (split : SplitList inbox) (p : filter (SplitList.el split) ≡ true) → InboxInFilterState inbox (Found split p)
 
 selected-filter : ∀ actor → ActorAtConstructor Selective actor → MessageFilter (Actor.inbox-shape actor)
 selected-filter record { computation = SelectiveReceive filter ⟶ _ } AtSelective = filter
@@ -494,13 +516,22 @@ data IsBlocked (store : Store) (inbs : Inboxes store) (actor : Actor) : Set₂ w
     (p : has-inbox store actor) →
     InboxForPointer [] store inbs p →
     IsBlocked store inbs actor
+\end{code}
+%<*BlockedSelective>
+\begin{code}
   BlockedSelective :
     (aac : ActorAtConstructor Selective actor) →
     (point : has-inbox store actor) →
     ∀ inbox →
+    {ps : All
+          (misses-filter (filter-named (selected-filter actor aac)))
+          inbox} →
     InboxForPointer inbox store inbs point →
-    InboxInFilterState {filter = filter-named (selected-filter actor aac)} inbox Nothing →
+    InboxInFilterState inbox (Nothing ps) →
     IsBlocked store inbs actor
+\end{code}
+%</BlockedSelective>
+\begin{code}
 
 -- The environment is a list of actors and inboxes,
 -- with a proof that every ector is valid in the context of said list of inboxes
@@ -602,3 +633,4 @@ data Done : Env → Set₂ where
             ; messages-valid = mv
             ; blocked-no-progress = bib
             })
+\end{code}

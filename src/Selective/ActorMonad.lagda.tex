@@ -48,6 +48,8 @@ record Message (To : InboxShape) : Set₁ where
     received-message-type : MT ∈ To
     received-fields : All receive-field-content MT
 
+open Message
+
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
 extract-references (ValueType x ∷ mt) = extract-references mt
@@ -57,9 +59,7 @@ add-references-static : TypingContext → MessageType → TypingContext
 add-references-static Γ MT = extract-references MT ++ Γ
 
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
-add-references Γ msg =
-  let open Message
-  in add-references-static Γ (msg .MT)
+add-references Γ msg = add-references-static Γ (msg .MT)
 
 \end{code}
 %<*MessageFilter>
@@ -73,6 +73,7 @@ MessageFilter IS = Message IS → Bool
 \begin{code}
 record SelectedMessage {IS : InboxShape}
             (f : MessageFilter IS) : Set₁ where
+  constructor sm:_[_]
   field
     msg : Message IS
     msg-ok : f msg ≡ true
@@ -81,14 +82,10 @@ record SelectedMessage {IS : InboxShape}
 
 %<*SelectedMessageAddReferences>
 \begin{code}
-
-selected-type : ∀ {IS}
-                    {filter : MessageFilter IS} →
-                    SelectedMessage filter →
-                    MessageType
-selected-type record {msg = msg } =
-  let open Message
-  in msg .MT
+selected-type : ∀ {IS} {filter : MessageFilter IS} →
+                SelectedMessage filter →
+                MessageType
+selected-type sm: msg [ msg-ok ] = msg .MT
 
 add-selected-references : TypingContext → ∀ {IS}
                             {filter : MessageFilter IS} →
