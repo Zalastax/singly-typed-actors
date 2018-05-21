@@ -1,6 +1,6 @@
 \begin{code}
 
-module Examples.SelectiveReceive where
+module Libraries.SelectiveReceive where
 
 open import ActorMonad public
 open import Prelude
@@ -229,33 +229,4 @@ selective-receive {IS = IS} {Γ} q f = case-of-find (find-split q f)
           where
             ret-v : SelRec IS f
             ret-v = record { msg = x ; msg-ok = p ; waiting = q }
-\end{code}
-
-\begin{code}
-
-BoolMessage = [ ValueType Bool ]ˡ
-SelectiveTestBox : InboxShape
-SelectiveTestBox = [ BoolMessage ]ˡ
-
-testActor : ∀ {i} → ActorM i SelectiveTestBox (Lift Bool) [] (λ _ → [])
-testActor = selective-receive [] only-true ∞>>= after-receive
-  where
-    only-true : Message SelectiveTestBox → Bool
-    only-true (Msg Z (b ∷ [])) = b
-    only-true (Msg (S ()) x₁)
-    after-receive : ∀ {i}
-                    (x : SelRec SelectiveTestBox only-true) →
-                    ∞ActorM i SelectiveTestBox (Lift Bool)
-                      (add-references [] (msg x) ++ waiting-refs (waiting x))
-                      (λ _ → [])
-    after-receive record { msg = (Msg Z (.true ∷ [])) ; msg-ok = refl } =
-      strengthen [] >>
-      return true
-    after-receive record { msg = (Msg (S ()) _) }
-
-spawner : ∀ {i} → ActorM i [] ⊤₁ [] (λ _ → [])
-spawner = begin do
-  spawn testActor
-  Z ![t: Z ] [ lift true ]ᵃ
-  strengthen []
 \end{code}

@@ -1,6 +1,6 @@
 include .rc.make
 
-subdirs := src/ src/Examples/ unused/ src/Selective/ src/Selective/Examples/
+subdirs := src/ src/Examples/ src/Libraries/ src/Selective/ src/Selective/Libraries/ src/Selective/Examples/
 agda-objects := $(wildcard $(subdirs:%=%*.agdai))
 executables := $(wildcard $(subdirs:%=%*.exe))
 malonzo := $(wildcard $(subdirs:%=%MAlonzo/))

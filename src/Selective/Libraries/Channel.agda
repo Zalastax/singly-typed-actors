@@ -1,8 +1,7 @@
-module Selective.Examples.Channel where
+module Selective.Libraries.Channel where
 
-open import Selective.ActorMonad
+open import Selective.ActorMonad public
 open import Prelude
-open import Data.Product using (Σ ; _,_ ; _×_ ; Σ-syntax)
 
 UniqueTag = ℕ
 TagField = ValueType UniqueTag
@@ -60,8 +59,16 @@ data DecideAccept : {MT CT : MessageType} {caller : InboxShape} →
                       IsChannelMessage CT →
                       All receive-field-content MT →
                       Set₁ where
-     Acceptable : ∀ {MT caller tag} {rest : All receive-field-content MT} {p : (TagField ∷ MT) ∈ caller} → DecideAccept tag p p (HasTag MT) (tag ∷ rest)
-     Unacceptable : ∀ {MT CT caller tag} {p : MT ∈ caller} {q : CT ∈ caller} {irp : IsChannelMessage CT} {fields : All receive-field-content MT} → DecideAccept tag p q irp fields
+     Acceptable : ∀ {MT caller tag}
+                    {rest : All receive-field-content MT}
+                    {p : (TagField ∷ MT) ∈ caller} →
+                    DecideAccept tag p p (HasTag MT) (tag ∷ rest)
+     Unacceptable : ∀ {MT CT caller tag}
+                      {p : MT ∈ caller}
+                      {q : CT ∈ caller}
+                      {irp : IsChannelMessage CT}
+                      {fields : All receive-field-content MT} →
+                      DecideAccept tag p q irp fields
 
 accept-response-candidate : {MT CT : MessageType} {receiver : InboxShape} →
                             (tag : UniqueTag) →
@@ -120,7 +127,8 @@ convert-response-unwrapped tag x fields (candidate ∷ candidates) ok  with (acc
 
 
 convert-response : ∀ {ct receiver} {session : ChannelSession ct receiver} →
-                     (sm : SelectedMessage (accept-response session)) → ChannelMessageDependent (ct .channel-shape) (selected-type sm)
+                     (sm : SelectedMessage (accept-response session)) →
+                     ChannelMessageDependent (ct .channel-shape) (selected-type sm)
 convert-response {ct} {session = session} record { msg = (Msg x fields) ; msg-ok = msg-ok } =
   let
   open ChannelType

@@ -1,7 +1,7 @@
 module Selective.Examples.Bookstore where
 
 open import Selective.ActorMonad
-open import Selective.Examples.Call using (UniqueTag ; call)
+open import Selective.Libraries.Call using (UniqueTag ; call)
 open import Prelude
 
 open import Data.Nat

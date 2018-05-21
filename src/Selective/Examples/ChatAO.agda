@@ -1,7 +1,9 @@
-module Selective.Examples.Chat where
+module Selective.Examples.ChatAO where
 
 open import Selective.ActorMonad
-open import Selective.Libraries.Call
+open import Selective.Libraries.Channel
+open import Selective.Libraries.Call2
+open import Selective.Libraries.ActiveObjects
 open import Prelude
   hiding (Maybe)
 open import Data.Maybe as Maybe
@@ -16,9 +18,143 @@ open import Data.Nat.Show using (show)
 RoomName = ℕ
 ClientName = ℕ
 
-ClientInterface : InboxShape
-Client-to-Room : InboxShape
 Room-to-Client : InboxShape
+
+record Client : Set where
+  field
+    name : ClientName
+    channel : UniqueTag
+
+ClientList : Set
+ClientList = List Client
+
+record RoomState : Set₁ where
+  field
+    clients : ClientList
+
+cl-to-context : ClientList → TypingContext
+cl-to-context = map λ _ → Room-to-Client
+
+rs-to-context : RoomState → TypingContext
+rs-to-context rs = let open RoomState
+  in cl-to-context (rs .clients)
+
+record ChatMessageContent : Set where
+  constructor chat-from_message:_
+  field
+    sender : ClientName
+    message : String
+
+SendChatMessage : MessageType
+SendChatMessage = [ ValueType ChatMessageContent ]ˡ
+
+
+ReceiveChatMessage : MessageType
+ReceiveChatMessage = ValueType UniqueTag ∷ [ ValueType ChatMessageContent ]ˡ
+
+chat-message-header : ActiveMethod
+chat-message-header = VoidMethod [ SendChatMessage ]ˡ
+
+Room-to-Client = [ ReceiveChatMessage ]ˡ
+
+AddToRoom : MessageType
+AddToRoom = ValueType UniqueTag ∷ ValueType ClientName ∷ [ ReferenceType Room-to-Client ]ˡ
+
+add-to-room-header : ActiveMethod
+add-to-room-header = VoidMethod [ AddToRoom ]ˡ
+
+LeaveRoom : MessageType
+LeaveRoom = [ ValueType ClientName ]ˡ
+
+leave-room-header : ActiveMethod
+leave-room-header = VoidMethod [ LeaveRoom ]ˡ
+
+room-methods : List ActiveMethod
+room-methods = chat-message-header ∷ leave-room-header ∷ [ add-to-room-header ]ˡ
+
+room-inbox = methods-shape room-methods
+
+add-to-room : (active-method room-inbox RoomState rs-to-context add-to-room-header)
+add-to-room _ (Msg Z (tag ∷ client-name ∷ _ ∷ [])) state = do
+  let
+    open RoomState
+    state' = record { clients = record { name = client-name ; channel = tag } ∷ state .clients }
+  strengthen (Z ∷ ⊆-refl)
+  return₁ state'
+add-to-room _ (Msg (S ()) _)
+
+record RoomLeave (rs : ClientList) (name : ClientName) : Set₁ where
+  field
+    filtered : ClientList
+    subs : (cl-to-context filtered) ⊆ (cl-to-context rs)
+
+leave-room : (active-method room-inbox RoomState rs-to-context leave-room-header)
+leave-room _ (Msg Z (client-name ∷ [])) state = do
+    let
+      open RoomState
+      open RoomLeave
+      rl = remove-first-client (state .clients) client-name
+      state' = record { clients = rl .filtered }
+    debug ("client#" || show client-name || " left the room") (strengthen (rl .subs))
+    return₁ state'
+  where
+    remove-first-client : (cl : ClientList) → (name : ClientName) → RoomLeave cl name
+    remove-first-client [] name = record { filtered = [] ; subs = [] }
+    remove-first-client (x ∷ cl) name with ((Client.name x) ≟ name)
+    ... | (yes _) = record { filtered = cl ; subs = ⊆-suc ⊆-refl }
+    ... | (no _) =
+      let
+        rec = remove-first-client cl name
+        open RoomLeave
+      in record { filtered = x ∷ rec .filtered ; subs = Z ∷ ⊆-suc (rec .subs) }
+leave-room _ (Msg (S ()) _) _
+
+chat-message : (active-method room-inbox RoomState rs-to-context chat-message-header)
+chat-message _ (Msg Z ((chat-from sender message: message) ∷ [])) state = do
+    let
+      open RoomState
+      debug-msg = ("room sending " || show (pred (length (state .clients))) ||  " messages from " || show sender || ": " || message)
+    debug debug-msg (send-to-others (state .clients) sender message)
+    return₁ state
+  where
+    ++-temp-fix : (l r : ClientList) → (x : Client) → (l ++ (x ∷ r)) ≡ ((l ∷ʳ x) ++ r)
+    ++-temp-fix [] r x = refl
+    ++-temp-fix (x₁ ∷ l) r x = cong (_∷_ x₁) (++-temp-fix l r x)
+    send-to-others : ∀ {i} → (cl : ClientList) →
+                     ClientName →
+                     String →
+                     ∞ActorM i room-inbox ⊤₁ (cl-to-context cl) (λ _ → cl-to-context cl)
+    send-to-others [] _ _ = return _
+    send-to-others cl@(_ ∷ _) name message = send-loop [] cl
+      where
+        build-pointer : (l r : ClientList) →
+                      cl-to-context r ⊢ Room-to-Client →
+                      (cl-to-context (l ++ r)) ⊢ Room-to-Client
+        build-pointer [] r p = p
+        build-pointer (x ∷ l) r p = S (build-pointer l r p)
+        recurse : ∀ {i} → (l r : ClientList) → (x : Client) →
+                  ∞ActorM i room-inbox ⊤₁ (cl-to-context (l ++ (x ∷ r))) (λ _ → (cl-to-context (l ++ (x ∷ r))))
+        send-loop : ∀ {i} → (l r : ClientList) →
+          ∞ActorM i room-inbox ⊤₁ (cl-to-context (l ++ r)) (λ _ → cl-to-context (l ++ r))
+        send-loop l [] = return _
+        send-loop l (x ∷ r) with ((Client.name x) ≟ name)
+        ... | (yes _) = recurse l r x
+        ... | (no _) = let p = build-pointer l (x ∷ r) Z
+          in debug ("Sending to " || show (Client.name x) || ": " || message) (p ![t: Z ] (lift (Client.channel x) ∷ [ lift (chat-from name message: message) ]ᵃ) ) >> recurse l r x
+        recurse l r x rewrite ++-temp-fix l r x = send-loop (l ∷ʳ x) r
+chat-message _ (Msg (S ()) _) _
+
+room : ActiveObject
+room = record {
+  state-type = RoomState
+  ; vars = rs-to-context
+  ; methods = room-methods
+  ; extra-messages = []
+  ; handlers = chat-message ∷ leave-room ∷ [ add-to-room ]ᵃ
+  }
+
+Client-to-Room : InboxShape
+Client-to-Room = SendChatMessage ∷ [ LeaveRoom ]ˡ
 
 -- =============
 --  JOIN ROOM
@@ -87,6 +223,18 @@ GetRoomManagerReply = ValueType UniqueTag ∷ [ ReferenceType RoomManagerInterfa
 GetRoomManager : MessageType
 GetRoomManager = ValueType UniqueTag ∷ [ ReferenceType [ GetRoomManagerReply ]ˡ ]ˡ
 
+get-room-manager-ci : ChannelInitiation
+get-room-manager-ci = record {
+  request = [ GetRoomManager ]ˡ
+  ; response = record {
+    channel-shape = [ GetRoomManagerReply ]ˡ
+    ; all-tagged = (HasTag _) ∷ [] }
+  ; request-tagged = (HasTag+Ref _) ∷ []
+  }
+
+get-room-manager-header : ActiveMethod
+get-room-manager-header = ResponseMethod get-room-manager-ci
+
 RoomSupervisorInterface : InboxShape
 RoomSupervisorInterface = [ GetRoomManager ]ˡ
 
@@ -99,242 +247,161 @@ ClientSupervisorInterface =
 --
 --
 
-record ChatMessageContent : Set where
-  constructor chat-from_message:_
-  field
-    sender : ClientName
-    message : String
+-- ======================
+--  ROOM MANAGER METHODS
+-- ======================
 
-ChatMessage : MessageType
-ChatMessage = [ ValueType ChatMessageContent ]ˡ
+join-room-header : ActiveMethod
+join-room-header = VoidMethod [ JoinRoom ]ˡ
 
-LeaveRoom : MessageType
-LeaveRoom = [ ValueType ClientName ]ˡ
+create-room-ci : ChannelInitiation
+create-room-ci = record {
+  request = [ CreateRoom ]ˡ
+  ; response = record {
+    channel-shape = [ CreateRoomReply ]ˡ
+    ; all-tagged = (HasTag _) ∷ [] }
+  ; request-tagged = (HasTag+Ref _) ∷ []
+  }
 
-Client-to-Room = ChatMessage ∷ [ LeaveRoom ]ˡ
+create-room-header : ActiveMethod
+create-room-header = ResponseMethod create-room-ci
 
-Room-to-Client = [ ChatMessage ]ˡ
-
-AddToRoom : MessageType
-AddToRoom = ValueType ClientName ∷ [ ReferenceType Room-to-Client ]ˡ
-
-RoomManager-to-Room : InboxShape
-RoomManager-to-Room = [ AddToRoom ]ˡ
-
-RoomInstanceInterface : InboxShape
-RoomInstanceInterface = Client-to-Room ++ RoomManager-to-Room
-
-ClientInterface = [ ReferenceType RoomManagerInterface ]ˡ ∷ CreateRoomReply ∷ ListRoomsReply ∷ JoinRoomReplyInterface
-
--- ======
---  ROOM
--- ======
-
-ClientList : Set
-ClientList = List ClientName
-
-record RoomState : Set₁ where
-  field
-    clients : ClientList
-
-
-cl-to-context : ClientList → TypingContext
-cl-to-context = map λ _ → Room-to-Client
-
-rs-to-context : RoomState → TypingContext
-rs-to-context rs = let open RoomState
-  in cl-to-context (rs .clients)
-
-record RoomLeave (rs : ClientList) (name : ClientName) : Set₁ where
-  field
-    filtered : ClientList
-    subs : (cl-to-context filtered) ⊆ (cl-to-context rs)
-
-++-temp-fix : (l r : ClientList) → (x : ClientName) → (l ++ (x ∷ r)) ≡ ((l ∷ʳ x) ++ r)
-++-temp-fix [] r x = refl
-++-temp-fix (x₁ ∷ l) r x = cong (_∷_ x₁) (++-temp-fix l r x)
-
-room-instance : ∀ {i} → ActorM i RoomInstanceInterface RoomState [] rs-to-context
-room-instance = begin (loop (record { clients = [] }))
-  where
-    -- only removes first occurance...
-    leave-room : (cl : ClientList) → (name : ClientName) → RoomLeave cl name
-    leave-room [] name = record { filtered = [] ; subs = [] }
-    leave-room (x ∷ cl) name with (x ≟ name)
-    ... | (yes _) = record { filtered = cl ; subs = ⊆-suc ⊆-refl }
-    ... | (no _) = let
-        rl = leave-room cl name
-        open RoomLeave
-      in record { filtered = x ∷ rl .filtered ; subs = Z ∷ ⊆-suc (rl .subs) }
-    send-to-others : ∀ {i} → (cl : ClientList) →
-                     ClientName →
-                     String →
-                     ∞ActorM i RoomInstanceInterface ⊤₁ (cl-to-context cl) (λ _ → cl-to-context cl)
-    send-to-others [] _ _ = return _
-    send-to-others cl@(_ ∷ _) name message = send-loop [] cl
-      where
-        build-pointer : (l r : ClientList) →
-                      cl-to-context r ⊢ Room-to-Client →
-                      (cl-to-context (l ++ r)) ⊢ Room-to-Client
-        build-pointer [] r p = p
-        build-pointer (x ∷ l) r p = S (build-pointer l r p)
-        recurse : ∀ {i} → (l r : ClientList) → (x : ClientName) →
-                  ∞ActorM i RoomInstanceInterface ⊤₁ (cl-to-context (l ++ (x ∷ r))) (λ _ → (cl-to-context (l ++ (x ∷ r))))
-        send-loop : ∀ {i} → (l r : ClientList) →
-          ∞ActorM i RoomInstanceInterface ⊤₁ (cl-to-context (l ++ r)) (λ _ → cl-to-context (l ++ r))
-        send-loop l [] = return _
-        send-loop l (x ∷ r) with (x ≟ name)
-        ... | (yes _) = recurse l r x
-        ... | (no _) = let p = build-pointer l (x ∷ r) Z
-          in debug ("Sending to " || show x || ": " || message) (p ![t: Z ] [ lift (chat-from name message: message) ]ᵃ ) >> recurse l r x
-        recurse l r x rewrite ++-temp-fix l r x = send-loop (l ∷ʳ x) r
-    handle-message : ∀ {i} → (rs : RoomState) →
-                     (m : Message RoomInstanceInterface) →
-                     ∞ActorM i RoomInstanceInterface RoomState (add-references (rs-to-context rs) m) rs-to-context
-    -- chat message
-    handle-message rs (Msg Z (chat-from client-name message: message ∷ [])) = do
-      let open RoomState
-      debug ("room sending " || show (pred (length (rs .clients))) ||  " messages from " || show client-name || ": " || message) (send-to-others (rs .clients) client-name message)
-      (return₁ rs)
-    -- leave room
-    handle-message rs (Msg (S Z) (client-name ∷ [])) = do
-      let
-        open RoomState
-        open RoomLeave
-        rl = leave-room (rs .clients) client-name
-      debug ("client#" || show client-name || " left the room") (strengthen (rl .subs))
-      (return₁ (record { clients = rl .filtered }))
-    -- add to room
-    handle-message rs (Msg (S (S Z)) (client-name ∷ _ ∷ [])) = do
-      let open RoomState
-      return₁ (record { clients = client-name ∷ rs .clients })
-    handle-message rs (Msg (S (S (S ()))) _)
-    loop : ∀ {i} →
-           (rs : RoomState) →
-           ∞ActorM i RoomInstanceInterface RoomState (rs-to-context rs) rs-to-context
-    loop state .force = begin do
-      m ← debug ("ROOM LOOP") receive
-      state' ← (handle-message state m)
-      loop state'
-
--- ==============
---  ROOM MANAGER
--- ==============
+list-rooms-header : ActiveMethod
+list-rooms-header = ResponseMethod (record {
+  request = [ ListRooms ]ˡ
+  ; response = record {
+    channel-shape = [ ListRoomsReply ]ˡ
+    ; all-tagged = (HasTag _) ∷ []
+    }
+  ; request-tagged = (HasTag+Ref _) ∷ []
+  })
 
 record RoomManagerState : Set₁ where
   field
     rooms : RoomList
 
 rms-to-context : RoomManagerState → TypingContext
-rms-to-context rms = rl-to-context (rms .rooms)
-  where
+rms-to-context rms =
+  let
     open RoomManagerState
     rl-to-context : RoomList → TypingContext
-    rl-to-context = map λ _ → RoomInstanceInterface
+    rl-to-context = map λ _ → room-inbox
+  in rl-to-context (rms .rooms)
+
+room-manager-methods : List ActiveMethod
+room-manager-methods = join-room-header ∷ create-room-header ∷ [ list-rooms-header ]ˡ
+
+room-manager-inbox = methods-shape room-manager-methods
+
+list-rooms : active-method room-manager-inbox RoomManagerState rms-to-context list-rooms-header
+list-rooms _ _ msg state =
+  let
+    open RoomManagerState
+  in return₁ (record {
+    new-state = state
+    ; reply = SendM Z ((lift (state .rooms)) ∷ [])
+    })
 
 lookup-room : ∀ {i} → {Γ : TypingContext} →
               (rms : RoomManagerState) →
               RoomName →
-              ∞ActorM i RoomManagerInterface (Maybe ((Γ ++ (rms-to-context rms)) ⊢ RoomInstanceInterface)) (Γ ++ (rms-to-context rms)) (λ _ → Γ ++ (rms-to-context rms))
+              ∞ActorM i room-manager-inbox (Maybe ((Γ ++ (rms-to-context rms)) ⊢ room-inbox)) (Γ ++ (rms-to-context rms)) (λ _ → Γ ++ (rms-to-context rms))
 lookup-room rms name =
-  let open RoomManagerState
-  in return₁ (loop _ (rms .rooms))
-  where
-    rl-to-context : RoomList → TypingContext
-    rl-to-context = map λ _ → RoomInstanceInterface
-    loop : (Γ : TypingContext) → (rl : RoomList) → Maybe ((Γ ++ rl-to-context rl) ⊢ RoomInstanceInterface)
-    loop [] [] = nothing
-    loop [] (x ∷ xs) with (x ≟ name)
-    ... | (yes p) = just Z
-    ... | (no _) = RawMonad._>>=_ Maybe.monad (loop [] xs) λ p → just (S p)
-    loop (x ∷ Γ) rl = RawMonad._>>=_ Maybe.monad (loop Γ rl) (λ p → just (S p))
+    let open RoomManagerState
+    in return₁ (loop _ (rms .rooms))
+    where
+      rl-to-context : RoomList → TypingContext
+      rl-to-context = map λ _ → room-inbox
+      loop : (Γ : TypingContext) → (rl : RoomList) → Maybe ((Γ ++ rl-to-context rl) ⊢ room-inbox)
+      loop [] [] = nothing
+      loop [] (x ∷ xs) with (x ≟ name)
+      ... | (yes p) = just Z
+      ... | (no _) = RawMonad._>>=_ Maybe.monad (loop [] xs) λ p → just (S p)
+      loop (x ∷ Γ) rl = RawMonad._>>=_ Maybe.monad (loop Γ rl) (λ p → just (S p))
 
-room-manager : ∀ {i} → ActorM i RoomManagerInterface RoomManagerState [] rms-to-context
-room-manager = begin (loop (record { rooms = [] }))
+create-room : active-method room-manager-inbox RoomManagerState rms-to-context create-room-header
+create-room _ _ (Msg Z (room-name ∷ [])) state = do
+    p ← lookup-room state room-name
+    handle-create-room p
   where
-    handle-room-join : ∀ {i} → {Γ : TypingContext} →
-                        UniqueTag →
-                        RoomName →
-                        ClientName →
-                        (Γ ⊢ JoinRoomReplyInterface) →
-                        (Maybe (Γ ⊢ RoomInstanceInterface)) →
-                        ∞ActorM i RoomManagerInterface ⊤₁ Γ (λ _ → Γ)
-    handle-room-join tag room-name client-name cp (just rp) = do
-      cp ![t: Z ] ((lift tag) ∷ (lift (JR-SUCCESS room-name)) ∷ [ [ rp ]>: (Z ∷ [ S Z ]ᵐ) ]ᵃ)
-      rp ![t: S (S Z) ] ((lift client-name) ∷ [ [ cp ]>: [ S (S Z) ]ᵐ ]ᵃ)
-    handle-room-join tag room-name client-name p nothing =
-      p ![t: S Z ] (lift tag ∷ [ lift (JR-FAIL room-name) ]ᵃ)
-    handle-create-room : ∀ {i} →
-                         (rms : RoomManagerState) →
-                         UniqueTag →
-                         RoomName →
-                         Maybe (([ CreateRoomReply ]ˡ ∷ rms-to-context rms) ⊢ RoomInstanceInterface) →
-                         ∞ActorM i RoomManagerInterface RoomManagerState ([ CreateRoomReply ]ˡ ∷ rms-to-context rms) rms-to-context
-    handle-create-room rms tag name (just x) = do
-      Z ![t: Z ] ((lift tag) ∷ [ lift (CR-EXISTS name) ]ᵃ)
-      strengthen (⊆-suc ⊆-refl)
-      return₁ rms
-    handle-create-room rms tag name nothing = do
-      Z ![t: Z ] ((lift tag) ∷ [ lift (CR-SUCCESS name) ]ᵃ)
-      strengthen (⊆-suc ⊆-refl)
-      spawn room-instance
+    handle-create-room : ∀ {i IS} → Maybe ( (IS ∷ rms-to-context state) ⊢ room-inbox) →
+                         ∞ActorM i room-manager-inbox (ActiveReply create-room-ci RoomManagerState rms-to-context (Msg Z (room-name ∷ [])) IS)
+                         (IS ∷ rms-to-context state)
+                         (reply-vars rms-to-context (Msg Z (room-name ∷ [])) IS)
+    handle-create-room (just x) = return₁ (record { new-state = state ; reply = SendM Z ((lift (CR-EXISTS room-name)) ∷ []) })
+    handle-create-room nothing = do
+      spawn∞ (run-active-object room (record { clients = [] }))
       let
-        rms' : RoomManagerState
-        rms' = (record { rooms = name ∷ RoomManagerState.rooms rms })
-      (return₁ rms')
-    handle-message : ∀ {i} → (rms : RoomManagerState) →
-                     (m : Message RoomManagerInterface) →
-                     ∞ActorM i RoomManagerInterface RoomManagerState (add-references (rms-to-context rms) m) rms-to-context
-    -- Jooin room
-    handle-message state (Msg Z (tag ∷ _ ∷ room-name ∷ client-name ∷ [])) = do
-      p ← (lookup-room state room-name)
-      handle-room-join tag room-name client-name Z p
-      (strengthen (⊆-suc ⊆-refl))
-      (return₁ state)
-    -- Create room
-    handle-message state (Msg (S Z) (tag ∷ _ ∷ name ∷ [])) = do
-      p ← lookup-room state name
-      handle-create-room state tag name p
-    -- List rooms
-    handle-message state (Msg (S (S Z)) (tag ∷ _ ∷ [])) = do
-      (Z ![t: Z ] ((lift tag) ∷ [(lift (RoomManagerState.rooms state) )]ᵃ))
-      (strengthen (⊆-suc ⊆-refl))
-      (return₁ state)
-    handle-message state (Msg (S (S (S ()))) _)
-    loop : ∀ {i} →
-           (rms : RoomManagerState) →
-           ∞ActorM i RoomManagerInterface RoomManagerState (rms-to-context rms) rms-to-context
-    loop state .force = begin do
-      m ← receive
-      state' ← handle-message state m
-      loop state'
+        open RoomManagerState
+        state' : RoomManagerState
+        state' = record { rooms = room-name ∷ state .rooms}
+      strengthen ((S Z) ∷ (Z ∷ (⊆-suc (⊆-suc ⊆-refl))))
+      return₁ (record { new-state = state' ; reply = SendM Z ((lift (CR-SUCCESS room-name)) ∷ []) })
+create-room _ _ (Msg (S ()) _) _
+
+join-room : active-method room-manager-inbox RoomManagerState rms-to-context join-room-header
+join-room _ (Msg Z (tag ∷ _ ∷ room-name ∷ client-name ∷ [])) state = do
+    p ← lookup-room state room-name
+    handle-join-room p Z
+    return₁ state
+  where
+    handle-join-room : ∀ {i Γ} → Maybe (Γ ⊢ room-inbox) → Γ ⊢ JoinRoomReplyInterface → ∞ActorM i room-manager-inbox ⊤₁ Γ (λ _ → Γ)
+    handle-join-room (just rp) cp = do
+      (rp ![t: S (S Z) ] ((lift tag) ∷ ((lift client-name) ∷ (([ cp ]>: [ S (S Z) ]ᵐ) ∷ []))))
+      (cp ![t: Z ] ((lift tag) ∷ ((lift (JR-SUCCESS room-name)) ∷ (([ rp ]>: (Z ∷ [ S Z ]ᵐ)) ∷ []))))
+    handle-join-room nothing cp = cp ![t: S Z ] ((lift tag) ∷ ((lift (JR-FAIL room-name)) ∷ []))
+join-room _ (Msg (S ()) _) _
+
+room-manager : ActiveObject
+room-manager = record {
+  state-type = RoomManagerState
+  ; vars = rms-to-context
+  ; methods = room-manager-methods
+  ; extra-messages = []
+  ; handlers = join-room ∷ (create-room ∷ (list-rooms ∷ []))
+  }
 
 -- =================
 --  ROOM SUPERVISOR
 -- =================
 
 rs-context : TypingContext
-rs-context = [ RoomManagerInterface ]ˡ
+rs-context = [ room-manager-inbox ]ˡ
+
+rs-vars : ⊤₁ → TypingContext
+rs-vars _ = rs-context
+
+room-supervisor-methods : List ActiveMethod
+room-supervisor-methods = [ get-room-manager-header ]ˡ
+
+rs-inbox = methods-shape room-supervisor-methods
+
+get-room-manager-handler : active-method rs-inbox ⊤₁ rs-vars get-room-manager-header
+get-room-manager-handler _ _ (Msg Z received-fields) _ = return₁ (record { new-state = _ ; reply = SendM Z [ [ (S Z) ]>: ⊆-refl ]ᵃ })
+get-room-manager-handler _ _ (Msg (S ()) _) _
+
+room-supervisor-ao : ActiveObject
+room-supervisor-ao = record
+                       { state-type = ⊤₁
+                       ; vars = λ _ → rs-context
+                       ; methods = room-supervisor-methods
+                       ; extra-messages = []
+                       ; handlers = [ get-room-manager-handler ]ᵃ
+                       }
 
 -- room-supervisor spawns the room-manager
 -- and provides an interface for getting a reference to the current room-manager
 -- we don't ever change that instance, but we could if we want
 room-supervisor : ∀ {i} → ActorM i RoomSupervisorInterface ⊤₁ [] (λ _ → rs-context)
 room-supervisor = begin do
-    (spawn room-manager)
-    provide-manager-instance
-  where
-    provide-manager-instance : ∀ {i} → ∞ActorM i RoomSupervisorInterface ⊤₁ rs-context (λ _ → rs-context)
-    provide-manager-instance .force = begin do
-      (Msg Z (tag ∷ _ ∷ [])) ← receive
-        where (Msg (S ()) _)
-      Z ![t: Z ] (lift tag ∷ [ [ S Z ]>: ⊆-refl ]ᵃ)
-      (strengthen (⊆-suc ⊆-refl))
-      provide-manager-instance
+    spawn∞ (run-active-object room-manager (record { rooms = [] }))
+    run-active-object room-supervisor-ao _
 
 -- ================
 --  CLIENT GENERAL
 -- ================
+ClientInterface : InboxShape
+ClientInterface = [ ReferenceType RoomManagerInterface ]ˡ ∷ CreateRoomReply ∷ ListRoomsReply ∷ JoinRoomReplyInterface
 
 busy-wait : ∀ {i IS Γ} → ℕ → ∞ActorM i IS ⊤₁ Γ (λ _ → Γ)
 busy-wait zero = return _
@@ -357,10 +424,20 @@ client-create-room : ∀ {i } →
                      RoomName →
                      ∞ActorM i ClientInterface (Lift CreateRoomResult) Γ (λ _ → Γ)
 client-create-room p tag name = do
-  record { msg = (Msg (S Z) (_ ∷ cr ∷ [])) } ← (call p (S Z) tag [ lift name ]ᵃ [ S Z ]ᵐ Z)
+  Msg Z (_ ∷ cr ∷ []) ← (call create-room-ci (record {
+    var = p
+    ; chosen-field = Z
+    ; fields = (lift name) ∷ []
+    ; session = record {
+      can-request = (S Z) ∷ []
+      ; response-session = record {
+      can-receive = (S Z) ∷ []
+      ; tag = tag
+      }
+      }
+      }))
     where
-      record { msg = (Msg Z (_ ∷ _)) ; msg-ok = () }
-      record { msg = (Msg (S (S _)) _) ; msg-ok = () }
+      Msg (S ()) _
   return cr
 
 add-if-join-success : TypingContext →
@@ -406,7 +483,7 @@ client-send-message : ∀ {i  Γ} →
                       ClientName →
                       String →
                       ∞ActorM i ClientInterface ⊤₁ Γ (λ _ → Γ)
-client-send-message p client-name message = p ![t: Z ] [ lift (chat-from client-name message: message) ]ᵃ
+client-send-message p client-name message = p ![t: Z ] ([ lift (chat-from client-name message: message) ]ᵃ)
 
 client-receive-message : ∀ {i Γ} →
                          ∞ActorM i ClientInterface (Lift ChatMessageContent) Γ (λ _ → Γ)
@@ -424,7 +501,7 @@ client-receive-message = do
     handle-message record { msg = (Msg (S (S Z)) _) ; msg-ok = () }
     handle-message record { msg = (Msg (S (S (S Z))) x₁) ; msg-ok = () }
     handle-message record { msg = (Msg (S (S (S (S Z)))) _) ; msg-ok = () }
-    handle-message record { msg = (Msg (S (S (S (S (S Z))))) (m ∷ [])) ; msg-ok = _ } = return m
+    handle-message record { msg = (Msg (S (S (S (S (S Z))))) (_ ∷ m ∷ f)) ; msg-ok = _ } = return m
     handle-message record { msg = (Msg (S (S (S (S (S (S ())))))) _) }
 
 client-leave-room : ∀ {i Γ} →
@@ -568,10 +645,19 @@ client-supervisor = begin do
                      UniqueTag →
                       ∞ActorM i ClientSupervisorInterface ⊤₁ Γ (λ _ → RoomManagerInterface ∷ Γ)
     get-room-manager p tag = do
-      record { msg = Msg (S Z) (_ ∷  _ ∷ []) } ← (call p Z tag [] (⊆-suc ⊆-refl) Z)
+      Msg Z f ← (call get-room-manager-ci (record {
+          var = p
+          ; chosen-field = Z
+          ; fields = []
+          ; session = record {
+            can-request = ⊆-refl
+            ; response-session = record {
+            can-receive = (S Z) ∷ []
+            ; tag = tag }
+            }
+          }))
         where
-          record { msg = (Msg Z (_ ∷ _)) ; msg-ok = () }
-          record { msg = (Msg (S (S ())) _) }
+          Msg (S ()) _
       return _
     spawn-clients : ∀ {i} → ∞ActorM i ClientSupervisorInterface ⊤₁ cs-context (λ _ → cs-context)
     spawn-clients = do
@@ -593,3 +679,4 @@ chat-supervisor = do
     spawn client-supervisor
     Z ![t: Z ] [ [ S Z ]>: ⊆-refl ]ᵃ
     strengthen []
+

@@ -1,8 +1,8 @@
 module Examples.Main-generated where
 import Examples.PingPong as PingPong
 import Examples.InfiniteBind as InfiniteBind
-import Examples.SelectiveReceive as SelectiveReceive
-import Examples.Call as Call
+import Examples.TestSelectiveReceive as SelectiveReceive
+import Examples.TestCall as Call
 open import Runtime
 open import SimulationEnvironment
 open import ActorMonad

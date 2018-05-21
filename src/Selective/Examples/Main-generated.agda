@@ -1,10 +1,11 @@
 module Selective.Examples.Main-generated where
 import Selective.Examples.PingPong as PingPong
-import Selective.Examples.Call as Call
+import Selective.Examples.TestCall as Call
+import Selective.Examples.TestCall2 as Call2
 import Selective.Examples.Fibonacci as Fib
 import Selective.Examples.Chat as Chat
 import Selective.Examples.Bookstore as Bookstore
-import Selective.Examples.TestAC as TestAC
+import Selective.Examples.TestAO as TestAO
 
 open import Selective.Runtime
 open import Selective.SimulationEnvironment
@@ -14,9 +15,10 @@ open ∞ActorM
 
 pingpongEntry = singleton-env (PingPong.spawner .force)
 callEntry = singleton-env (Call.calltestActor .force)
+call2Entry = singleton-env (Call2.calltestActor .force)
 fibEntry = singleton-env (Fib.spawner .force)
 chatEntry = singleton-env (Chat.chat-supervisor .force)
 bookstoreEntry = singleton-env (Bookstore.bookstore-supervisor .force)
-testacEntry = singleton-env (TestAC.calculator-test-actor .force)
+testaoEntry = singleton-env (TestAO.calculator-test-actor .force)
 
-main = IO.run (run-env testacEntry)
+main = IO.run (run-env call2Entry)
