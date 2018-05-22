@@ -1,8 +1,12 @@
+\begin{code}
 module Selective.Libraries.Channel where
 
 open import Selective.ActorMonad public
 open import Prelude
 
+\end{code}
+%<*ChannelType>
+\begin{code}
 UniqueTag = ℕ
 TagField = ValueType UniqueTag
 
@@ -13,13 +17,24 @@ record ChannelType : Set₁ where
   field
     channel-shape : InboxShape
     all-tagged : All IsChannelMessage channel-shape
+\end{code}
+%</ChannelType>
+\begin{code}
 
 open ChannelType
 
-record ChannelSession (channel : ChannelType) (receiver : InboxShape): Set₁ where
+\end{code}
+%<*ChannelSession>
+\begin{code}
+record ChannelSession
+        (channel : ChannelType)
+        (receiver : InboxShape): Set₁ where
   field
     can-receive : (channel .channel-shape) <: receiver
     tag : UniqueTag
+\end{code}
+%</ChannelSession>
+\begin{code}
 
 record ChannelCandidate (channel-shape receiver : InboxShape) : Set₁ where
   field
@@ -136,10 +151,20 @@ convert-response {ct} {session = session} record { msg = (Msg x fields) ; msg-ok
   candidates = channel-candidates (ct .all-tagged) (session .can-receive)
     in convert-response-unwrapped (session .tag) x fields candidates msg-ok
 
+\end{code}
+%<*from-channel>
+\begin{code}
 from-channel : ∀ {Γ i receiver} →
                ∀ ct →
                ChannelSession ct receiver →
-               ∞ActorM i receiver (Message (ct .channel-shape)) Γ (add-references Γ)
+               ∞ActorM i
+                receiver
+                (Message (ct .channel-shape))
+                Γ
+                (add-references Γ)
+\end{code}
+%</from-channel>
+\begin{code}
 from-channel ct cs =
   let
     open ChannelType
@@ -150,41 +175,76 @@ from-channel ct cs =
     let record { accepted-which = aw ; fields = fields } = convert-response {session = cs} m
     return₁ (Msg {MT = msg .MT} aw fields)
 
-
+\end{code}
+%<*ChannelInitiation>
+\begin{code}
 data IsRequestMessage (IS : InboxShape) : MessageType → Set₁ where
-  HasTag+Ref : ∀ MT → IsRequestMessage IS (TagField ∷ ReferenceType IS ∷ MT)
+  HasTag+Ref :
+    ∀ MT →
+    IsRequestMessage IS (TagField ∷ ReferenceType IS ∷ MT)
 
 record ChannelInitiation : Set₁ where
   field
     request : InboxShape
     response : ChannelType
-    request-tagged : All (IsRequestMessage (response .channel-shape)) request
-
+    request-tagged : All 
+                      (IsRequestMessage (response .channel-shape))
+                      request
+\end{code}
+%</ChannelInitiation>
+\begin{code}
 open ChannelInitiation
 
-record ChannelInitiationSession (ci : ChannelInitiation) (caller callee : InboxShape): Set₁ where
+\end{code}
+%<*ChannelInitiationSession>
+\begin{code}
+record ChannelInitiationSession
+        (ci : ChannelInitiation)
+        (caller callee : InboxShape): Set₁ where
   field
     can-request : (ci .request) <: callee
     response-session : ChannelSession (ci .response) caller
-
-extra-fields-shape : ∀ {IS Mt} → IsRequestMessage IS Mt → MessageType
+\end{code}
+%</ChannelInitiationSession>
+%<*Request>
+\begin{code}
+extra-fields-shape : ∀ {IS Mt} →
+                      IsRequestMessage IS Mt →
+                      MessageType
 extra-fields-shape (HasTag+Ref Mt) = Mt
 
-extra-fields : ∀ {IS Mt} → (Γ : TypingContext) → IsRequestMessage IS Mt → Set₁
-extra-fields Γ irm = All (send-field-content Γ) (extra-fields-shape irm)
+extra-fields : ∀ {IS Mt} →
+                (Γ : TypingContext) →
+                IsRequestMessage IS Mt →
+                Set₁
+extra-fields Γ irm = All
+                      (send-field-content Γ)
+                      (extra-fields-shape irm)
 
-record Request (Γ : TypingContext) (caller : InboxShape) (ci : ChannelInitiation) : Set₁ where
+record Request (Γ : TypingContext)
+               (caller : InboxShape)
+               (ci : ChannelInitiation) : Set₁ where
   field
     {callee} : InboxShape
     var : Γ ⊢ callee
     {MtTo} : MessageType
     chosen-field : MtTo ∈ (ci .request)
-    fields : extra-fields Γ (lookup-all chosen-field (ci .request-tagged))
+    fields : extra-fields
+              Γ
+              (lookup-all chosen-field (ci .request-tagged))
     session : ChannelInitiationSession ci caller callee
+\end{code}
+%</Request>
+%<*initiate-channel-fields>
+\begin{code}
 
-suc-send-field-content : ∀ {Γ IS F} → send-field-content Γ F → send-field-content (IS ∷ Γ) F
+suc-send-field-content : ∀ {Γ IS F} →
+                          send-field-content Γ F →
+                          send-field-content (IS ∷ Γ) F
 suc-send-field-content {F = ValueType x} sfc = sfc
-suc-send-field-content {F = ReferenceType x} ([ actual-is-sendable ]>: actual-handles-requested) = [ S actual-is-sendable ]>: actual-handles-requested
+suc-send-field-content {F = ReferenceType x}
+  ([   actual-is-sendable ]>: actual-handles-requested) =
+   [ S actual-is-sendable ]>: actual-handles-requested
 
 initiate-channel-fields :
   ∀ {Γ caller ci} →
@@ -199,10 +259,16 @@ initiate-channel-fields {ci = ci} record {
   let open ChannelSession
       open ChannelInitiationSession
       channel = session .response-session
-  in (lift (channel .tag)) ∷ (([ Z ]>: (channel .can-receive)) ∷ ∀map suc-send-field-content fields)
+      channel-tag = lift (channel .tag)
+      reference = [ Z ]>: (channel .can-receive)
+  in channel-tag ∷ reference ∷ ∀map suc-send-field-content fields
 
+\end{code}
+%</initiate-channel-fields>
+%<*initiate-channel>
+\begin{code}
 initiate-channel : ∀ {Γ i receiver} →
-                   ∀ ci →
+                   (ci : ChannelInitiation) →
                    Request Γ receiver ci →
                    ∞ActorM i receiver ⊤₁ Γ (λ _ → Γ)
 initiate-channel ci request =
@@ -211,6 +277,12 @@ initiate-channel ci request =
     open ChannelInitiationSession
   in do
     self
-    let protocol-to-callee = translate-⊆ (request .session .can-request)
-    S (request .var) ![t: protocol-to-callee (request .chosen-field) ] initiate-channel-fields request
+    let
+      protocol-to-callee = translate-⊆ (request .session .can-request)
+      to = S (request .var)
+      which = protocol-to-callee (request .chosen-field)
+    to ![t: which ] initiate-channel-fields request
     strengthen (⊆-suc ⊆-refl)
+\end{code}
+%</initiate-channel>
+\begin{code}

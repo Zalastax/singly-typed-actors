@@ -1,3 +1,5 @@
+\begin{code}
+
 module Selective.Libraries.Call2 where
 
 open import Selective.Libraries.Channel public
@@ -6,10 +8,18 @@ open import Prelude
 open ChannelType
 open ChannelInitiation
 
+\end{code}
+%<*call>
+\begin{code}
 call : ∀ {Γ i caller} →
-        ∀ protocol →
+        (protocol : ChannelInitiation) →
         Request Γ caller protocol →
-        ∞ActorM i caller (Message (protocol .response .channel-shape)) Γ (add-references Γ)
+        ∞ActorM
+          i
+          caller
+          (Message (protocol .response .channel-shape))
+          Γ
+          (add-references Γ)
 call protocol request =
   let
     open ChannelInitiationSession
@@ -19,3 +29,5 @@ call protocol request =
     initiate-channel _ request
     let rs = request .session .response-session
     from-channel (protocol .response) rs
+\end{code}
+%</call>

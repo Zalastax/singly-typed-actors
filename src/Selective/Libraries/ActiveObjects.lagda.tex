@@ -1,3 +1,4 @@
+\begin{code}
 module Selective.Libraries.ActiveObjects where
 
 open import Selective.Libraries.Channel public
@@ -225,3 +226,4 @@ run-active-object ac state .force =
   handle-active-method ac m state ∞>>= λ state' →
   run-active-object ac state'
   }
+\end{code}

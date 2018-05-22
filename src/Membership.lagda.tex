@@ -46,10 +46,19 @@ find-∈ {x = x} _ = x
 -- find-∈ {ls = x ∷ xs} Z = x
 -- find-∈ (S px) = find-∈ px
 
-translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} → (ls ⊆ ks) → (x ∈ ls) → (x ∈ ks)
+\end{code}
+%<*translate-sub>
+\begin{code}
+translate-⊆ : ∀ {a} {A : Set a} {ls ks : List A} {x : A} →
+              (ls ⊆ ks) →
+              (x ∈ ls) →
+              (x ∈ ks)
 translate-⊆ [] ()
 translate-⊆ (x₂ ∷ subs) Z = x₂
 translate-⊆ (x₂ ∷ subs) (S px) = translate-⊆ subs px
+\end{code}
+%</translate-sub>
+\begin{code}
 
 lookup-parallel : ∀ {a b} {A : Set a} {B : Set b} {x : A} {gss : List A} → x ∈ gss → (refs : List B) → (f : B → A) → map f refs ≡ gss → B
 lookup-parallel Z [] f ()
@@ -69,9 +78,17 @@ translate-∈ (S px) [] f ()
 translate-∈ Z (x ∷ refs) f refl = Z
 translate-∈ (S px) (x ∷ refs) f refl = S (translate-∈ px refs f refl)
 
-lookup-all : ∀ {a p} {A : Set a} {P : A → Set p} {ls : List A} {x : A} → x ∈ ls → All P ls → P x
+\end{code}
+%<*lookup-all>
+\begin{code}
+lookup-all : ∀ {a p} {A : Set a} {P : A → Set p} {ls : List A} {x : A} →
+              x ∈ ls →
+              All P ls → P x
 lookup-all Z (px ∷ pxs) = px
 lookup-all (S px) (px₁ ∷ pxs) = lookup-all px pxs
+\end{code}
+%</lookup-all>
+\begin{code}
 
 All-⊆ : ∀ {a p} {A : Set a} {P : A → Set p} {xs ys} → xs ⊆ ys → All P ys → All P xs
 All-⊆ {xs = []} {ys} subs pys = []
