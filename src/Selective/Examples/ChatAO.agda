@@ -294,7 +294,7 @@ room-manager-methods = join-room-header ∷ create-room-header ∷ [ list-rooms-
 room-manager-inbox = methods-shape room-manager-methods
 
 list-rooms : active-method room-manager-inbox RoomManagerState rms-to-context list-rooms-header
-list-rooms _ _ msg state =
+list-rooms _ msg state =
   let
     open RoomManagerState
   in return₁ (record {
@@ -320,14 +320,20 @@ lookup-room rms name =
       loop (x ∷ Γ) rl = RawMonad._>>=_ Maybe.monad (loop Γ rl) (λ p → just (S p))
 
 create-room : active-method room-manager-inbox RoomManagerState rms-to-context create-room-header
-create-room _ _ (Msg Z (room-name ∷ [])) state = do
+create-room _ input@(_ sent Msg Z (room-name ∷ [])) state = do
     p ← lookup-room state room-name
     handle-create-room p
   where
-    handle-create-room : ∀ {i IS} → Maybe ( (IS ∷ rms-to-context state) ⊢ room-inbox) →
-                         ∞ActorM i room-manager-inbox (ActiveReply create-room-ci RoomManagerState rms-to-context (Msg Z (room-name ∷ [])) IS)
-                         (IS ∷ rms-to-context state)
-                         (reply-vars rms-to-context (Msg Z (room-name ∷ [])) IS)
+    open ResponseInput
+    return-type = ActiveReply create-room-ci RoomManagerState rms-to-context input
+    precondition = reply-state-vars rms-to-context input state
+    postcondition = reply-vars rms-to-context input
+    handle-create-room : ∀ {i} → Maybe (precondition ⊢ room-inbox) →
+                         ∞ActorM i
+                           room-manager-inbox
+                           return-type
+                           precondition
+                           postcondition
     handle-create-room (just x) = return₁ (record { new-state = state ; reply = SendM Z ((lift (CR-EXISTS room-name)) ∷ []) })
     handle-create-room nothing = do
       spawn∞ (run-active-object room (record { clients = [] }))
@@ -337,7 +343,7 @@ create-room _ _ (Msg Z (room-name ∷ [])) state = do
         state' = record { rooms = room-name ∷ state .rooms}
       strengthen ((S Z) ∷ (Z ∷ (⊆-suc (⊆-suc ⊆-refl))))
       return₁ (record { new-state = state' ; reply = SendM Z ((lift (CR-SUCCESS room-name)) ∷ []) })
-create-room _ _ (Msg (S ()) _) _
+create-room _ (_ sent Msg (S ()) _) _
 
 join-room : active-method room-manager-inbox RoomManagerState rms-to-context join-room-header
 join-room _ (Msg Z (tag ∷ _ ∷ room-name ∷ client-name ∷ [])) state = do
@@ -377,8 +383,8 @@ room-supervisor-methods = [ get-room-manager-header ]ˡ
 rs-inbox = methods-shape room-supervisor-methods
 
 get-room-manager-handler : active-method rs-inbox ⊤₁ rs-vars get-room-manager-header
-get-room-manager-handler _ _ (Msg Z received-fields) _ = return₁ (record { new-state = _ ; reply = SendM Z [ [ (S Z) ]>: ⊆-refl ]ᵃ })
-get-room-manager-handler _ _ (Msg (S ()) _) _
+get-room-manager-handler _ (_ sent Msg Z received-fields) _ = return₁ (record { new-state = _ ; reply = SendM Z [ [ (S Z) ]>: ⊆-refl ]ᵃ })
+get-room-manager-handler _ (_ sent Msg (S ()) _) _
 
 room-supervisor-ao : ActiveObject
 room-supervisor-ao = record

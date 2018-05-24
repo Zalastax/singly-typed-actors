@@ -52,12 +52,12 @@ calculator-state-vars : ⊤₁ → TypingContext
 calculator-state-vars _ = []
 
 add : (active-method calculator-inbox ⊤₁ calculator-state-vars add-method-header)
-add _ _ (Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z  [ lift (n + m)]ᵃ })
-add _ _ (Msg (S ()) _) _
+add _ (_ sent Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z  [ lift (n + m)]ᵃ })
+add _ (_ sent Msg (S ()) _) _
 
 multiply : (active-method calculator-inbox ⊤₁ (λ _ → []) multiply-method-header)
-multiply _ _ (Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z [ lift (n * m)]ᵃ })
-multiply _ _ (Msg (S ()) _) _
+multiply _ (_ sent Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z [ lift (n * m)]ᵃ })
+multiply _ (_ sent Msg (S ()) _) _
 
 calculator : ActiveObject
 calculator = record {

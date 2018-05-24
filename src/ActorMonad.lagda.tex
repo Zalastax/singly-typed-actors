@@ -144,7 +144,7 @@ The property to maintain for this to hold is that the type of the reference must
     S <: T \quad inbox : \overrightarrow{T} \quad name \mapsto inbox \\
     \hline
     \operatorname{Reference}(name) : S
-\end{array}  
+\end{array}
 \]
 
 The desire to statically check that references are well-typed has affected the design of \ourlang a lot.
@@ -223,7 +223,8 @@ We capture this property in a special version of the reference typing judgement,
 where $Γ ⊢>: T$ says that T is a subtype of some type in Γ.
 
 \begin{code}
-record _⊢>:_ (Γ : TypingContext) (requested : InboxShape) : Set₁ where
+record _⊢>:_ (Γ : TypingContext)
+             (requested : InboxShape) : Set₁ where
   constructor [_]>:_
   field
     {actual} : InboxShape
@@ -265,7 +266,8 @@ send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
-record SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
+record SendMessage (To : InboxShape)
+                   (Γ : TypingContext) : Set₁ where
   constructor SendM
   field
     {MT} : MessageType
