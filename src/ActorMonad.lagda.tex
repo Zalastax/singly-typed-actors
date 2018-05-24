@@ -321,17 +321,6 @@ infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 %</LiftTop>
 
 %<*ActorMonad>
-This thesis started out with the goal of formalizing the λ-calculus for actors that
-\textcite{DBLP:conf/ecoop/FowlerLW17} call $λ_{act}$.
-When investigating $λ_{act}$ we noticed that the language had a structure that made it suitable
-for being directly embedded in Agda,
-as opposed to the external λ-calculus we originally envisioned.
-What we had found was that the processes of $λ_{act}$ were instances of the monad pattern.
-Furthermore,
-\textcite{DBLP:conf/ecoop/FowlerLW17} show that if the host language is sufficiently advanced
-selective receive can be implemented as a library, in contrast to having it as a built in primitive.
-This led us to implement \ourlang as an embedded DSL in the form of a monad.
-
 The goal when translating $λ_{act}$ to an Agda embedding was to make the actors correct by construction,
 and to make it possible to type-check each actor separately.
 The pattern we found suitable is a monad parameterized by the type of the actor's

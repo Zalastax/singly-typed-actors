@@ -2,6 +2,7 @@
 module Selective.Libraries.ActiveObjects where
 
 open import Selective.Libraries.Channel public
+open import Selective.Libraries.ReceiveSublist
 open import Prelude
 
 open ChannelType
@@ -293,39 +294,11 @@ handle-active-method ac input state =
     forget-message input
     return₁ state'
 
-accept-sublist-unwrapped : (xs ys zs : InboxShape) → ∀{MT} → MT ∈ (xs ++ ys ++ zs) → Bool
-accept-sublist-unwrapped [] [] zs p = false
-accept-sublist-unwrapped [] (y ∷ ys) zs Z = true
-accept-sublist-unwrapped [] (y ∷ ys) zs (S p) = accept-sublist-unwrapped [] ys zs p
-accept-sublist-unwrapped (x ∷ xs) ys zs Z = false
-accept-sublist-unwrapped (x ∷ xs) ys zs (S p) = accept-sublist-unwrapped xs ys zs p
-
-
-accept-sublist : (xs ys zs : InboxShape) → MessageFilter (xs ++ ys ++ zs)
-accept-sublist xs ys zs (Msg received-message-type received-fields) = accept-sublist-unwrapped xs ys zs received-message-type
-
-record AcceptSublistDependent (IS : InboxShape) (accepted-type : MessageType) : Set₁ where
-  field
-    accepted-which : accepted-type ∈ IS
-    fields : All receive-field-content accepted-type
-
 receive-active-method : {i : Size} →
                         {Γ : TypingContext} →
                         (ac : ActiveObject) →
                         ∞ActorM i (active-inbox-shape ac) (Message (methods-shape (ac .methods))) Γ (add-references Γ)
-receive-active-method ac = do
-    record { msg = Msg {MT} p f ; msg-ok = msg-ok } ← selective-receive (accept-sublist [] (methods-shape (ac .methods)) (ac .extra-messages))
-    let record {accepted-which = aw ; fields = fields } = rewrap-message (methods-shape (ac .methods)) (ac .extra-messages) p f msg-ok
-    return₁ (Msg {MT = MT} aw fields)
-  where
-    rewrap-message : ∀{MT} → (ys zs : InboxShape) → (p : MT ∈ (ys ++ zs)) → All receive-field-content MT → (accept-sublist-unwrapped [] ys zs p) ≡ true → AcceptSublistDependent ys MT
-    rewrap-message [] zs which f ()
-    rewrap-message (x ∷ ys) zs Z f p = record { accepted-which = Z ; fields = f }
-    rewrap-message (x ∷ ys) zs (S which) f p =
-      let
-        rec = rewrap-message ys zs which f p
-        open AcceptSublistDependent
-      in record { accepted-which = S (rec .accepted-which) ; fields = rec .fields }
+receive-active-method ac = receive-sublist [] (methods-shape (ac .methods)) (ac .extra-messages)
 
 \end{code}
 %<*run-active-object>
