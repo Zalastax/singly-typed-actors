@@ -1,7 +1,9 @@
 \begin{code}
 module Examples.Types where
 
-open import Level using (_⊔_)
+open import Level
+  using (_⊔_)
+  renaming (zero to lzero ; suc to lsuc)
 
 open import Data.Unit using (⊤ ; tt)
 open import Data.Bool using (Bool ; false ; true)
@@ -109,3 +111,15 @@ g = identity' {Bool}
 h = identity' 2
 \end{code}
 %</ImplicitIdentity>
+%<*Lift>
+\begin{code}
+record Lift {a ℓ} (A : Set a) : Set (a ⊔ ℓ) where
+  constructor lift
+  field lower : A
+\end{code}
+%</Lift>
+%<*LiftBool>
+\begin{code}
+Bool₁ = Lift {lzero} {lsuc lzero} Bool
+\end{code}
+%</LiftBool>
