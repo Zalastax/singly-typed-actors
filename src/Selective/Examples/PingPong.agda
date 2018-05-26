@@ -19,6 +19,12 @@ open import Prelude
 Spawnbox : InboxShape
 Spawnbox = []
 
+ℕ₁ : Set₁
+ℕ₁ = Lift ℕ
+
+Bool₁ : Set₁
+Bool₁ = Lift Bool
+
 mutual
   PingValues = [ Bool ]ˡ
   PongValues = [ ℕ ]ˡ
@@ -53,15 +59,6 @@ constPingrefs _ =  PingRefs
 pingMainActor : (i : Size) (A : Set₁) → Set₂
 pingMainActor i A = ∞ActorM i Pingbox A PingRefs constPingrefs
 
-mutual
-  pingReceive : ∀ {i} (msg : Message Pingbox) → ∞ActorM i Pingbox (Lift Bool) (add-references PingRefs msg) constPingrefs
-  pingReceive (Msg Z (b ∷ [])) = return b
-  pingReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPingValue
-  pingReceive (Msg (S (S ())) x₁)
-
-  loopTillPingValue : ∀ {i} → pingMainActor i (Lift Bool)
-  loopTillPingValue .force = receive ∞>>= pingReceive
-
 pinger : ∀ {i} → ∞ActorM (↑ i) Pingbox ⊤₁ [] constPingrefs
 pinger .force = waitForPong ∞>> pingMain 0
   where
@@ -74,10 +71,19 @@ pinger .force = waitForPong ∞>> pingMain 0
         record { msg = (Msg Z _) ; msg-ok = () }
         ; record { msg = (Msg (S Z) _) ; msg-ok = refl } → return _
         ; record { msg = (Msg (S (S ())) x₁) }
-
+      }
+    waitForPingValue : ∀ {i Γ} → ∞ActorM i Pingbox Bool₁ Γ (λ _ → Γ)
+    waitForPingValue = selective-receive (λ {
+      (Msg Z _) → true
+      ; (Msg (S Z) _) → false
+      ; (Msg (S (S ())) _)
+      }) >>= λ {
+      record { msg = (Msg Z (b ∷ [])) ; msg-ok = refl } → return b
+      ; record { msg = (Msg (S Z) _) ; msg-ok = () }
+      ; record { msg = (Msg (S (S ())) x₁) }
       }
     pingMain : ∀ {i} → ℕ → pingMainActor i ⊤₁
-    pingMain n .force = loopTillPingValue ∞>>= λ
+    pingMain n .force = waitForPingValue ∞>>= λ
       { (lift false) → (Z ![t: Z ] ([ lift n ]ᵃ)) >> pingMain (suc n)
       ; (lift true) → return _}
 
@@ -86,14 +92,6 @@ constPongrefs _ = PongRefs
 
 pongMainActor : (i : Size) (A : Set₁) → Set₂
 pongMainActor i A = ∞ActorM i Pongbox A PongRefs constPongrefs
-
-mutual
-  pongReceive : ∀ {i} (msg : Message Pongbox) → ∞ActorM i Pongbox (Lift ℕ) (add-references PongRefs msg) constPongrefs
-  pongReceive (Msg Z (n ∷ [])) = return n
-  pongReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPongValue
-  pongReceive (Msg (S (S ())) _)
-  loopTillPongValue : ∀ {i} → pongMainActor i (Lift ℕ)
-  loopTillPongValue .force = receive ∞>>= pongReceive
 
 ponger : ∀ {i} → ∞ActorM (↑ i) Pongbox ⊤₁ [] constPongrefs
 ponger .force = waitForPing ∞>> ((Z ![t: Z ] ([ lift false ]ᵃ)) >> pongMain)
@@ -108,8 +106,18 @@ ponger .force = waitForPing ∞>> ((Z ![t: Z ] ([ lift false ]ᵃ)) >> pongMain)
         ; record { msg = (Msg (S Z) x₁) ; msg-ok = refl } → return _
         ; record { msg = (Msg (S (S ())) x₁) }
         }
+    waitForPongValue : ∀ {i Γ} → ∞ActorM i Pongbox ℕ₁ Γ (λ _ → Γ)
+    waitForPongValue = selective-receive (λ {
+      (Msg Z _) → true
+      ; (Msg (S Z) _) → false
+      ; (Msg (S (S ())) _)
+      }) >>= λ {
+        record { msg = (Msg Z (n ∷ [])) ; msg-ok = refl } → return n
+        ; record { msg = (Msg (S Z) x₁) ; msg-ok = () }
+        ; record { msg = (Msg (S (S ())) x₁) }
+        }
     pongMain : ∀ {i} → pongMainActor i ⊤₁
-    pongMain .force = loopTillPongValue ∞>>= λ {
+    pongMain .force = waitForPongValue ∞>>= λ {
       (lift 10) → Z ![t: Z ] [ lift true ]ᵃ
       ; (lift n) → Z ![t: Z ] [ lift false ]ᵃ >> pongMain
       }
