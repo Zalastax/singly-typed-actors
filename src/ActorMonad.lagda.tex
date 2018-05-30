@@ -166,8 +166,10 @@ A typing context associates variables to types,
 where variables are commonly referred to by their name.
 Variable names makes expressions easy to understand for humans,
 but pose two annoying problems: α-renaming and α-equivalence.
+
 α-equivalence is a form of equivalence that captures the intuition that the particular choice of
 a bound variable name does not usually matter \parencite{turbak2008design}.
+
 Renaming the variables of an expression in a way that preserves α-equivalence
 is called α-renaming \parencite{turbak2008design}.
 α-renaming is a part of the general concept of substitution,
@@ -200,16 +202,15 @@ the variable typing context as a list of types, with variables as
 We choose to represent the indices as the membership proposition
 in order to make the de Bruijn indices correct by construction.
 This lets us define the type judgement $Γ ⊢ T$ as:
-
-\AgdaCatch{Membership}{ElementIn}
+\begin{minipage}{\textwidth}
 \begin{code}
 ReferenceTypes = List InboxShape
 TypingContext = ReferenceTypes
 
 _⊢_ : TypingContext → InboxShape → Set₁
 Γ ⊢ T = T ∈ Γ
-
 \end{code}
+\end{minipage}
 %</ActorPrecondition>
 
 %<*ReferenceSubtype>
@@ -237,7 +238,8 @@ The notion of a subtype for references is important to implement
 the pattern of sending a command together with what reference to reply to,
 since different actors receiving the reply will have a different \AgdaFunction{InboxShape}.
 This pattern, together with a selective receive construct,
-can be used to implement synchronous calls \parencite{ericsson_gen}.
+can be used to implement synchronous calls,
+which we explore in chapter \ref{chap:selective_receive}.
 %</ReferenceSubtype>
 
 %<*Messages>
@@ -400,7 +402,8 @@ The spawned actor starts with both an empty inbox and an empty variable context.
 %</ActorMonadSpawn>
 %<*ActorMonadSend>
 An actor can send messages to any actor it has a reference to.
-It is not explicit in the monad what happens to a sent message, but we see in (SECTION)
+It is not explicit in the monad what happens to a sent message,
+but we see in section \ref{sec:mact_semantics}
 that evaluating Send will append the message to the actor being referenced.
 The reference variable might be a subtype to the underlying actor it references,
 but this fact is completely opaque to the

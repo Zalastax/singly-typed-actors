@@ -30,7 +30,7 @@ definitional = refl
 
 %<*Cong>
 \begin{code}
-cong : {A B : Set} {m n : A} → (f : A → B) → m ≡ n → f m ≡ f n
+cong : ∀ {a} {A B : Set a} {m n : A} → (f : A → B) → m ≡ n → f m ≡ f n
 cong f refl = refl
 
 
@@ -66,6 +66,7 @@ StringMessage = [ ValueType String ]ˡ
 
 OtherInbox : InboxShape
 OtherInbox = StringMessage ∷ [ BoolMessage ]ˡ
+
 RefNatMessage : MessageType
 RefNatMessage = ReferenceType OtherInbox ∷ [ ValueType ℕ ]ˡ
 

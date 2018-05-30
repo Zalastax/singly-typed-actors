@@ -157,8 +157,10 @@ Inbox is = List (NamedMessage is)
 
 data Inboxes : (store : Store) → Set₁ where
   [] : Inboxes []
-  _∷_ : ∀ {store name inbox-shape} → Inbox inbox-shape →
-    (inboxes : Inboxes store) → Inboxes (inbox# name [ inbox-shape ] ∷ store)
+  _∷_ : ∀ {store name inbox-shape} →
+          Inbox inbox-shape →
+          (inboxes : Inboxes store) →
+          Inboxes (inbox# name [ inbox-shape ] ∷ store)
 \end{code}
 %</Inboxes>
 \begin{code}
