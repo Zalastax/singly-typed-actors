@@ -1,0 +1,61 @@
+\begin{code}
+module Examples.TestSelectiveReceive where
+
+open import Prelude
+open import Libraries.SelectiveReceive
+
+open SelRec
+
+OtherInbox : InboxShape
+OtherInbox = []
+
+SomeMessage : MessageType
+SomeMessage = []
+
+\end{code}
+%<*Interface>
+\begin{code}
+WithReference : MessageType
+WithReference = ValueType ℕ ∷ [ ReferenceType OtherInbox ]ˡ
+
+SR-inbox : InboxShape
+SR-inbox = SomeMessage ∷ [ WithReference ]ˡ
+\end{code}
+%</Interface>
+%<*Filter>
+\begin{code}
+receive-42 : MessageFilter SR-inbox
+receive-42 (Msg Z _) = false
+receive-42 (Msg (S Z) (n ∷ _ ∷ [])) = ⌊ n ≟ 42 ⌋
+receive-42 (Msg (S (S ())) _)
+\end{code}
+%</Filter>
+%<*AfterReceive>
+\begin{code}
+after-receive : ∀ {i Γ} →
+  (m : SelRec SR-inbox receive-42) →
+  ∞ActorM i SR-inbox
+    (List (Message SR-inbox))
+    (add-references Γ (msg m) ++ waiting-refs (waiting m))
+    (λ q' → OtherInbox ∷ Γ ++ (waiting-refs q'))
+after-receive (sm: Msg Z _ [ () ]-stash: _)
+after-receive (sm: Msg (S Z) (n ∷ _ ∷ [])
+                   [ msg-ok ]-stash: waiting) =
+              return₁ waiting
+after-receive (sm: Msg (S (S ())) _ [ _ ]-stash: _)
+\end{code}
+%</AfterReceive>
+%<*Body>
+\begin{code}
+receive-42-with-reference : ∀ {i Γ} →
+                            (q : List (Message SR-inbox)) →
+                            ActorM i SR-inbox
+                                (List (Message SR-inbox))
+                                (Γ ++ (waiting-refs q))
+                                (λ q' → OtherInbox ∷ Γ ++
+                                        (waiting-refs q'))
+receive-42-with-reference q =
+  selective-receive q receive-42 ∞>>=
+  after-receive
+\end{code}
+%</Body>

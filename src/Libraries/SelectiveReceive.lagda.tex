@@ -170,6 +170,7 @@ MessageFilter IS = Message IS → Bool
 %<*SelRec>
 \begin{code}
 record SelRec (IS : InboxShape) (f : MessageFilter IS) : Set₁ where
+  constructor sm:_[_]-stash:_
   field
     msg : Message IS
     msg-ok : f msg ≡ true

@@ -20,6 +20,7 @@ By limiting the types of messages sent to an inbox,
 we can make sure that every message read from the inbox has a valid type.
 In terms of \textcite{DBLP:conf/agere/KosterCM16}, this is the interface of the actor.
 
+\begin{minipage}{\textwidth}
 \begin{code}
 mutual
   data MessageField : Set₁ where
@@ -30,6 +31,7 @@ mutual
 
   InboxShape = List MessageType
 \end{code}
+\end{minipage}
 
 We define the type of an actor's inbox as an algebraic data-type with sums
 (\AgdaFunction{InboxShape}) of products (\AgdaFunction{MessageType}).
@@ -51,8 +53,10 @@ similar to Haskell's tuples.
 
 The fields in \AgdaFunction{MessageType} are combinations of value types and reference types.
 A value type is any type from Agda's lowest set universe.
-Typical examples are \AgdaDatatype{Bool}, \AgdaDatatype{ℕ},
-or \AgdaRecord{⊤}.
+Typical examples are \AgdaDatatype{Bool}, \AgdaDatatype{ℕ}, \AgdaDatatype{String}
+\AgdaDatatype{List} \AgdaDatatype{ℕ},
+\AgdaDatatype{Bool} \AgdaOperator{\AgdaFunction{×}} \AgdaDatatype{ℕ},
+and many user-defined types that are non-polymorphic.
 We limit the types to the lowest set universe as a sort of approximation of serializable values.
 It would be possible to further constrain the types to only those that are serializable,
 but due to its insignificance to the calculus we have opted not to.
@@ -77,7 +81,7 @@ The reference in the second kind of message can be sent two kinds of messages as
 messages containing a single boolean value,
 and messages containing a single string value.
 
-\AgdaCatch{Examples/Types}{ExampleInbox}
+\AgdaCatchGroup{Examples/Types}{ExampleInbox}
 %</InboxShape>
 
 %<*InboxShapeSubtype>
@@ -111,7 +115,7 @@ An element that appears at the head of a list is at index \AgdaInductiveConstruc
 and the index of an element that appears somewhere in the tail of the list is
 the successor (\AgdaInductiveConstructor{S}) of its index in the tail.
 
-\AgdaCatch{Membership}{ElementIn}
+\AgdaCatchGroup{Membership}{ElementIn}
 
 The subset relation \AgdaBound{A} \AgdaDatatype{⊆} \AgdaBound{B} holds if
 every member of \AgdaBound{A} is also a member of \AgdaBound{B}.
@@ -119,33 +123,29 @@ This can be modelled as a function from indices of \AgdaBound{A} to indices of \
 but this turned out to be inconvenient for our purposes.
 An alternative approach is to build subsets as a \emph{view} \parencite{DBLP:journals/jfp/McBrideM04, norell2008dependently}
 of the lists in question.
-A view is a datatype that reveals something interesting about its indices, \eg that a list is a subset of another.
+A view is a data type that reveals something interesting about its indices, \eg that a list is a subset of another.
 To define \AgdaDatatype{⊆} we state that the empty list (\AgdaInductiveConstructor{[]}) is a subset of all lists,
 and we state that you can add an element to a subset (\AgdaInductiveConstructor{∷}) if you
 are able to prove that the element is a member of the other set.
 
-\AgdaCatch{Membership}{Subset}
+\AgdaCatchGroup{Membership}{Subset}
 
 The drawback of using subsets is that recursive subtypes are not captured,
 but we deem it good enough for our purposes and simple to work with.
 Proving that \AgdaBound{A} \AgdaFunction{<:} \AgdaBound{B} boils down to
 providing an index into \AgdaBound{B} for every element in \AgdaBound{A}.
 
-\AgdaCatch{Examples/Types}{Subtyping}
+\AgdaCatchGroup{Examples/Types}{Subtyping}
 %</InboxShapeSubtype>
 
 %<*ActorPrecondition>
 A reference to an actor is a name that is used to look up that actor's inbox in order to write or read from it.
 We assign types to references in order to statically guarantee that we will only send messages to an inbox which the receiving actor can understand.
-The property to maintain for this to hold is that the type of the reference must be a subtype of the inbox it references:
+The property to maintain for this to hold is that the type of the reference must be a subtype of the inbox it references.
+That is, given that an inbox is globally referred to via $\mathit{name}$ and has messages of type $T$,
+the type of a reference to $\mathit{name}$ must have a type $S$, such that $S <: T$:
 
-\[
-  \begin{array}{@{}c@{}}
-    S <: T \quad inbox : \overrightarrow{T} \quad name \mapsto inbox \\
-    \hline
-    \operatorname{Reference}(name) : S
-\end{array}
-\]
+\input{include/figures/reference_to_inbox}
 
 The desire to statically check that references are well-typed has affected the design of \ourlang a lot.
 We first tried an encoding of references where a name is simply tagged with a type:
@@ -223,6 +223,7 @@ and is thus contravariant in its argument \parencite{DBLP:conf/ecoop/HeWT14}.
 We capture this property in a special version of the reference typing judgement,
 where $Γ ⊢>: T$ says that T is a subtype of some type in Γ.
 
+\begin{minipage}{\textwidth}
 \begin{code}
 record _⊢>:_ (Γ : TypingContext)
              (requested : InboxShape) : Set₁ where
@@ -233,6 +234,7 @@ record _⊢>:_ (Γ : TypingContext)
     actual-handles-requested : requested <: actual
 
 \end{code}
+\end{minipage}
 
 The notion of a subtype for references is important to implement
 the pattern of sending a command together with what reference to reply to,
@@ -262,8 +264,8 @@ but rather a variable in the reference context.
 The type of the selected reference variable must be compatible with the type that the receiver expects,
 \ie they must have the correct subtype relation.
 
+\begin{minipage}{\textwidth}
 \begin{code}
-
 send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
@@ -276,22 +278,24 @@ record SendMessage (To : InboxShape)
     selected-message-type : MT ∈ To
     send-fields : All (send-field-content Γ) MT
 \end{code}
+\end{minipage}
 
 Incoming messages differ from outgoing messages in the instantiation of reference fields.
-One would expect the content of a reference field to be some representation of a reference,
+Looking at \AgdaFunction{receive{-}field{-}content} below,
+one would expect the content of a reference field to be some representation of a reference,
 \eg an index into the variable context.
-Instead we find the unit type, which has no computational content at all.
+Instead we find the unit type \AgdaDatatype{⊤}, which has no computational content at all.
 The answer to this puzzle lies in that receiving a message will have the side-effect of
 adding the references from every reference field to the variable context.
-We will see in section \ref{sec:actorm} that the shape of the variable typing context is maintained
-in the type of the monad, making it easy to create indices into the variable context
+We saw in figure \ref{fig:actorm} that the shape of the variable typing context is maintained
+in the type of the monad,
+making it easy to create indices into the variable context
 without making them a part of the message.
-It would be possible to make the reference field content be an indices into the variable context,
+It would be possible to make the reference field content be an index into the variable context,
 but it would make the model slightly more complicated without making it more powerful.
 
-
+\begin{minipage}{\textwidth}
 \begin{code}
-
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
@@ -311,45 +315,14 @@ extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
 add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
 \end{code}
+\end{minipage}
 %</Messages>
 \begin{code}
 infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
-\end{code}
-%<*LiftTop>
-\begin{code}
 ⊤₁ : Set₁
 ⊤₁ = Lift ⊤
 \end{code}
-%</LiftTop>
-
-%<*ActorMonad>
-The goal when translating $λ_{act}$ to an Agda embedding was to make the actors correct by construction,
-and to make it possible to type-check each actor separately.
-The pattern we found suitable is a monad parameterized by the type of the actor's
-inbox (\AgdaFunction{InboxShape}) and indexed by a reference variable context.
-Following \textcite{DBLP:conf/ecoop/FowlerLW17}, the \AgdaFunction{InboxShape} of an actor is
-constant over its lifetime and should be likened with the type-and-effect system of $λ_{act}$.
-Each actor has their own reference variable context and the way it changes over time
-is kept track of in the style of the parameterized monad pattern,
-capturing preconditions and postconditions in the type.
-
-Actors are potentially infinite processes, making it suitable to model \ourlang using coinduction.
-Following the lead of \textcite{DBLP:journals/corr/AbelC14},
-we represent the monad \AgdaDatatype{ActorM} as a mutual definition of an inductive
-datatype and a coinductive record.
-The record \AgdaRecord{∞ActorM} is a coalgebra that one interacts with by using its
-single observation (copattern) \AgdaField{force}.
-\AgdaField{force} gives us an element of the \AgdaDatatype{ActorM} datatype
-on which we can pattern match to see which computation to perform next.
-
-Both \AgdaDatatype{ActorM} and \AgdaRecord{∞ActorM} are indexed by a size $i$.
-The size is a lower bound on the number of times we can iteratively \AgdaField{force}
-the computation,
-but should primarily be seen as a means to establish productivity of recursive definitions.
-When we actually simulate running actors,
-we only care for \AgdaDatatype{ActorM}\AgdaSpace{}\AgdaPostulate{∞}\AgdaSpace{}\AgdaDatatype{A}
- of infinite depth.
-
+%<*ActorMonadHeader>
 \begin{code}
 data ActorM (i : Size) (IS : InboxShape) : (A : Set₁) →
               (pre : TypingContext) →
@@ -366,34 +339,20 @@ record ∞ActorM (i : Size) (IS : InboxShape) (A : Set₁)
 
 data ActorM (i : Size) (IS : InboxShape) where
 \end{code}
-%</ActorMonad>
+%</ActorMonadHeader>
 %<*ActorMonadBindReturn>
-Return and bind of the actor monad use the invariants that are expected from any parameterized
-monad, which is explained in section \ref{parameterized_monads}.
-Bind chains together potentially infinite sub-computations,
-and we can see that bind preserves the size (observation depth) $i$.
-Agda implements subtyping for sizes,
-so computations of different sizes can still be composed via bind.
-
-We don't give the constructors \AgdaInductiveConstructor{Return}
-and \AgdaInductiveConstructor{∞>>=}
-the names return and $\Bind$,
-since we want those names to refer to the type \AgdaRecord{∞ActorM}.
-Instead, the actual return and $\Bind$ are defined as a separate functions
-that wrap \AgdaInductiveConstructor{Return} and
-\AgdaInductiveConstructor{∞>>=}.
-
 \begin{code}
-  Return : ∀ {A post} → (val : A) → ActorM i IS A (post val) post
-  _∞>>=_ : ∀ {A B pre mid post} → (m : ∞ActorM i IS A pre mid) →
+  Return : ∀ {A post} →
+    (val : A) →
+    ActorM i IS A (post val) post
+
+  _∞>>=_ : ∀ {A B pre mid post} →
+    (m : ∞ActorM i IS A pre mid) →
     (f : (x : A) → ∞ActorM i IS B (mid x) (post)) →
     ActorM i IS B pre post
 \end{code}
 %</ActorMonadBindReturn>
 %<*ActorMonadSpawn>
-\AgdaInductiveConstructor{Spawn} creates a new actor and
-adds a reference to the spawned actor to the spawning actor's variable context.
-The spawned actor starts with both an empty inbox and an empty variable context.
 \begin{code}
   Spawn : {NewIS : InboxShape} → {A : Set₁} → ∀ {pre postN} →
     ActorM i NewIS A [] postN →
@@ -401,16 +360,6 @@ The spawned actor starts with both an empty inbox and an empty variable context.
 \end{code}
 %</ActorMonadSpawn>
 %<*ActorMonadSend>
-An actor can send messages to any actor it has a reference to.
-It is not explicit in the monad what happens to a sent message,
-but we see in section \ref{sec:mact_semantics}
-that evaluating Send will append the message to the actor being referenced.
-The reference variable might be a subtype to the underlying actor it references,
-but this fact is completely opaque to the
-\AgdaInductiveConstructor{Send} construct.
-The contents of the message is detailed in section \ref{sec:messages}.
-Sending  a message does of course not affect the variable context,
-which is captured in the postcondition being the same as the precondition.
 \begin{code}
   Send : ∀ {pre} → {ToIS : InboxShape} →
     (canSendTo : pre ⊢ ToIS) →
@@ -419,51 +368,24 @@ which is captured in the postcondition being the same as the precondition.
 \end{code}
 %</ActorMonadSend>
 %<*ActorMonadReceive>
-The \AgdaInductiveConstructor{Receive} construct is an operation
-that optimistically tries to retrieve a message from the actor's inbox.
-Messages are retrieved in the order they are added to the inbox,
-and in the case of an empty inbox the actor is paused indefinitely.
-As discussed in section \ref{sec:messages}, every reference in the received message will be added
-to the actor's variable context.
-\AgdaInductiveConstructor{Receive} is the only construct that has a postcondition that depends on
-run-time behaviour, so a model where references are handled differently could allow for
-actors to be implemented as non-parameterized monads.
 \begin{code}
-  Receive : ∀ {pre} → ActorM i IS (Message IS) pre (add-references pre)
+  Receive : ∀ {pre} →
+    ActorM i IS (Message IS) pre (add-references pre)
 \end{code}
 %</ActorMonadReceive>
 %<*ActorMonadSelf>
-A key concept in Erlang-style actors is that actors can easily get a reference to themselves.
-For example, in order to implement callbacks the initiating actor must include a reference
-to itself for the corresponding actor to reply to.
-In \AgdaDatatype{ActorM}, this need is fulfilled by the
-\AgdaInductiveConstructor{Self} construct,
-which adds a reference to the actor itself to the variable context.
 \begin{code}
-  Self : ∀ {pre} → ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
+  Self : ∀ {pre} →
+    ActorM i IS ⊤₁ pre (λ _ → IS ∷ pre)
 \end{code}
 %</ActorMonadSelf>
 %<*ActorMonadStrengthen>
-The postconditions and preconditions that we get from our Hoare-style reasoning are sometimes not
-quite what we want.
-The invariants might be logically equivalent but have a different syntactic form.
-For example, the variable context might be in the wrong order
-or knows about more references than is expected.
-We thus need a construct for reordering or forgetting about variables to
-make subsequent invariants compatible.
-What we chose to implement is similar to the strengthening rule in Hoare logic,
-which affects the precondition of a statement.
-The operation that \AgdaInductiveConstructor{Strengthen}
-performs is a re-ordering of the variables in the variable context.
-It does so by relating the precondition to the postcondition via a subset relation.
-The subset relation supports re-ordering, duplication, and to forget variables,
-making it powerful without sacrificing correctness.
 \begin{code}
-  Strengthen   : ∀ {ys xs} → (inc : ys ⊆ xs) →
+  Strengthen   : ∀ {ys xs} →
+    (inc : ys ⊆ xs) →
     ActorM i IS ⊤₁ xs (λ _ → ys)
 \end{code}
 %</ActorMonadStrengthen>
-
 %<*ActorMonadHelpers>
 \begin{code}
 

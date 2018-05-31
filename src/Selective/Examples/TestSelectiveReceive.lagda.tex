@@ -1,0 +1,55 @@
+\begin{code}
+module Selective.Examples.TestSelectiveReceive where
+
+open import Selective.ActorMonad
+open import Prelude
+
+OtherInbox : InboxShape
+OtherInbox = []
+
+SomeMessage : MessageType
+SomeMessage = []
+
+\end{code}
+%<*Interface>
+\begin{code}
+WithReference : MessageType
+WithReference = ValueType ℕ ∷ [ ReferenceType OtherInbox ]ˡ
+
+SR-inbox : InboxShape
+SR-inbox = SomeMessage ∷ [ WithReference ]ˡ
+\end{code}
+%</Interface>
+%<*Filter>
+\begin{code}
+receive-42 : MessageFilter SR-inbox
+receive-42 (Msg Z _) = false
+receive-42 (Msg (S Z) (n ∷ _ ∷ [])) = ⌊ n ≟ 42 ⌋
+receive-42 (Msg (S (S ())) _)
+\end{code}
+%</Filter>
+%<*AfterReceive>
+\begin{code}
+after-receive : ∀ {i Γ} →
+  (msg : SelectedMessage receive-42) →
+  ∞ActorM i SR-inbox
+    ⊤₁
+    (add-selected-references Γ msg)
+    (λ _ → OtherInbox ∷ Γ)
+after-receive sm: Msg Z _ [ () ]
+after-receive sm: Msg (S Z) (n ∷ _ ∷ []) [ msg-ok ] = return tt
+after-receive sm: Msg (S (S ())) _ [ _ ]
+\end{code}
+%</AfterReceive>
+%<*Body>
+\begin{code}
+receive-42-with-reference : ∀ {i Γ} →
+                            ActorM i SR-inbox
+                              ⊤₁
+                              Γ
+                              (λ _ → OtherInbox ∷ Γ)
+receive-42-with-reference =
+  selective-receive receive-42 ∞>>=
+  after-receive
+\end{code}
+%</Body>

@@ -89,8 +89,10 @@ selected-type sm: msg [ msg-ok ] = msg .MT
 
 add-selected-references : TypingContext → ∀ {IS}
                             {filter : MessageFilter IS} →
-                            SelectedMessage filter → TypingContext
-add-selected-references Γ m = add-references-static Γ (selected-type m)
+                            SelectedMessage filter →
+                            TypingContext
+add-selected-references Γ m =
+    add-references-static Γ (selected-type m)
 \end{code}
 %</SelectedMessageAddReferences>
 \begin{code}
@@ -131,8 +133,12 @@ data ActorM (i : Size) (IS : InboxShape) where
 %<*SelectiveReceiveConstruct>
 \AgdaTarget{SelectiveReceive}
 \begin{code}
-    SelectiveReceive : ∀ {pre} → (filter : MessageFilter IS) →
-      ActorM i IS (SelectedMessage filter) pre (add-selected-references pre)
+    SelectiveReceive : ∀ {pre} →
+        (filter : MessageFilter IS) →
+        ActorM i IS
+          (SelectedMessage filter)
+          pre
+          (add-selected-references pre)
 \end{code}
 %</SelectiveReceiveConstruct>
 \begin{code}

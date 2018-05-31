@@ -8,14 +8,17 @@ open import Prelude
 ℕ₁ = Lift ℕ
 
 \end{code}
-%<*All>
+%<*Interfaces>
 \begin{code}
 TickTock : MessageType
 TickTock = [ ValueType Bool ]ˡ
 
 TickTocker : InboxShape
 TickTocker = [ TickTock ]ˡ
-
+\end{code}
+%</Interfaces>
+%<*tick-tocker>
+\begin{code}
 tick-tocker : ∀ {i} → ∞ActorM (↑ i) TickTocker ⊤₁ [] (λ _ → [])
 tick-tocker .force = (do
   self
@@ -32,7 +35,10 @@ tick-tocker .force = (do
   to ![t: tag ] fields
   strengthen []) ∞>>=
   λ _  → tick-tocker
-
+\end{code}
+%</tick-tocker>
+%<*spawner>
+\begin{code}
 spawner : ∀ {i} → ∞ActorM i [] ℕ₁ [] (λ _ → [ TickTocker ]ˡ)
 spawner = do
   spawn∞ tick-tocker
@@ -47,4 +53,4 @@ spawner = do
   to ![t: tag ] fields
   return 42
 \end{code}
-%</All>
+%</spawner>
