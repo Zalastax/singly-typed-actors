@@ -22,15 +22,21 @@ skip-twice i s = s .tail (↑ i) .tail i
 \end{code}
 %</SkipTwice>
 %<*Fib>
+\begin{minipage}{\textwidth}
 \begin{code}
 zipWith : (i : Size) {A B C : Set} → (A → B → C) →
           Stream i A → Stream i B → Stream i C
 (zipWith i f xs ys) .head = f (xs .head) (ys .head)
 (zipWith i f xs ys) .tail j = zipWith j f (xs .tail j) (ys .tail j)
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 fib : (i : Size) → Stream i ℕ
 fib i .head = 0
 fib i .tail j .head = 1
 fib i .tail j .tail k = zipWith k _+_ (fib k) (fib j .tail k)
 \end{code}
+\end{minipage}
 %</Fib>

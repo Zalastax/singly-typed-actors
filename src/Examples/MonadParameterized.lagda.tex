@@ -33,12 +33,17 @@ data MonadParam (B : Set) : {p q : Set} → p → (B → q) → Set₁ where
 %</Monad>
 
 %<*MonadFile>
+\begin{minipage}{\textwidth}
 \begin{code}
 
 data FileState : Set where
   Open : String → FileState
   Closed : FileState
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 data FileMonad : (A : Set) → FileState → (A → FileState) → Set₁ where
   return : ∀ {A post} → (val : A) → FileMonad A (post val) post
   _>>=_ : ∀ {A B pre mid post} →
@@ -48,12 +53,17 @@ data FileMonad : (A : Set) → FileState → (A → FileState) → Set₁ where
   OpenFile : String → FileMonad FileState Closed (λ x → x)
   CloseFile : ∀ { s } → FileMonad ⊤ (Open s) (λ _ → Closed)
   WriteFile : ∀ { s } → String → FileMonad ⊤ (Open s) (λ _ → Open s)
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 writeHello : FileMonad ⊤ Closed (λ _ → Closed)
 writeHello = OpenFile "world.txt" >>= λ {
   Closed → return _ ;
   (Open _) → WriteFile "hello" >>= λ _ → CloseFile
   }
 \end{code}
+\end{minipage}
 %</MonadFile>
 

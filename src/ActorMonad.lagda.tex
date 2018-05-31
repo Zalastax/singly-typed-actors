@@ -38,7 +38,7 @@ We define the type of an actor's inbox as an algebraic data-type with sums
 The \AgdaFunction{InboxShape} is a variant type that details
 all the messages that can be received from an inbox.
 Every message sent to an actor will have exactly one of the types that is listed,
-which we communicate as a tag attached to the message (see section \ref{sec:messages}).
+which we communicate as a tag attached to the message (see section~\ref{sec:messages}).
 We can think of the \AgdaFunction{InboxShape} as a set of types,
 and every message coming paired with a proof that the message is a type from that set.
 To know what type a message has you have to inspect the proof,
@@ -183,18 +183,10 @@ to represent variable binders \parencite{DBLP:journals/entcs/BerghoferU07}.
 A de Bruijn index is a natural number that represents an occurrence of a variable in a λ-term,
 and denotes the number of binders that are in scope between that occurrence
 and its corresponding binder.
-Following are some examples comparing a λ-calculus with names
-and a λ-calculus using de Bruijn indices.
+Figure~\ref{fig:debruijn} shows some examples comparing a λ-calculus with names
+to a λ-calculus using de Bruijn indices.
 
-\begin{table}[htbp]
-\centering
-\begin{tabular}{ll}
-Named                                 & de Bruijn                 \\
-$ λ\ x → x $                          & $ λ\ 1 $                  \\
-$ λ\ x → λ\ y → x $                   & $ λ\ λ\ 2 $               \\
-$ λ\ x → λ\ y → λ\ z → x\ z\ (y\ z) $ & $ λ\ λ\ λ\ 3\ 1\ (2\ 1) $ \\
-\end{tabular}
-\end{table}
+\input{include/figures/debruijn}
 
 What makes de Bruijn indices easy to work with in Agda is that it lets us manage
 the variable typing context as a list of types, with variables as
@@ -202,6 +194,7 @@ the variable typing context as a list of types, with variables as
 We choose to represent the indices as the membership proposition
 in order to make the de Bruijn indices correct by construction.
 This lets us define the type judgement $Γ ⊢ T$ as:
+
 \begin{minipage}{\textwidth}
 \begin{code}
 ReferenceTypes = List InboxShape
@@ -241,7 +234,7 @@ the pattern of sending a command together with what reference to reply to,
 since different actors receiving the reply will have a different \AgdaFunction{InboxShape}.
 This pattern, together with a selective receive construct,
 can be used to implement synchronous calls,
-which we explore in chapter \ref{chap:selective_receive}.
+which we explore in chapter~\ref{chap:selective_receive}.
 %</ReferenceSubtype>
 
 %<*Messages>
@@ -269,7 +262,11 @@ The type of the selected reference variable must be compatible with the type tha
 send-field-content : TypingContext → MessageField → Set₁
 send-field-content Γ (ValueType A) = Lift A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 record SendMessage (To : InboxShape)
                    (Γ : TypingContext) : Set₁ where
   constructor SendM
@@ -287,7 +284,7 @@ one would expect the content of a reference field to be some representation of a
 Instead we find the unit type \AgdaDatatype{⊤}, which has no computational content at all.
 The answer to this puzzle lies in that receiving a message will have the side-effect of
 adding the references from every reference field to the variable context.
-We saw in figure \ref{fig:actorm} that the shape of the variable typing context is maintained
+We saw in figure~\ref{fig:actorm} that the shape of the variable typing context is maintained
 in the type of the monad,
 making it easy to create indices into the variable context
 without making them a part of the message.
@@ -299,19 +296,31 @@ but it would make the model slightly more complicated without making it more pow
 receive-field-content : MessageField → Set
 receive-field-content (ValueType A) = A
 receive-field-content (ReferenceType Fw) = ⊤
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 record Message (To : InboxShape) : Set₁ where
   constructor Msg
   field
     {MT} : MessageType
     received-message-type : MT ∈ To
     received-fields : All receive-field-content MT
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 extract-references : MessageType → ReferenceTypes
 extract-references [] = []
 extract-references (ValueType x ∷ mt) = extract-references mt
 extract-references (ReferenceType T ∷ mt) = T ∷ extract-references mt
+\end{code}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
+\begin{code}
 add-references : ∀ {To} → TypingContext → Message To → TypingContext
 add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
 \end{code}

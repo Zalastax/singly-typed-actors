@@ -453,14 +453,20 @@ record SplitList {a : Level} {A : Set a} (ls : List A) : Set (lsuc a) where
     is-ls : (heads) ++ (el ∷ tails) ≡ ls
 \end{code}
 %</SplitList>
-%<*FoundInList>
+%<*matches-filter>
 \begin{code}
 matches-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
 matches-filter f v = f v ≡ true
-
+\end{code}
+%</matches-filter>
+%<*misses-filter>
+\begin{code}
 misses-filter : ∀{a} {A : Set a} → (f : A → Bool) → A → Set
 misses-filter f v = f v ≡ false
-
+\end{code}
+%</misses-filter>
+%<*FoundInList>
+\begin{code}
 data FoundInList {a : Level} {A : Set a}
                  (ls : List A)
                  (f : A → Bool) :
