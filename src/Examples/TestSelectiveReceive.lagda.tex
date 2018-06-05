@@ -59,3 +59,10 @@ receive-42-with-reference q =
   after-receive
 \end{code}
 %</Body>
+\begin{code}
+spawner : ∀ {i} → ActorM i SR-inbox
+                    (List (Message SR-inbox))
+                    []
+                    (λ q' → OtherInbox ∷ (waiting-refs q'))
+spawner = receive-42-with-reference []
+\end{code}

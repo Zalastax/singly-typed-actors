@@ -1,9 +1,7 @@
-module Selective.Examples.TestAO where
+module Selective.Examples.TestChannel where
 
-open import Selective.ActorMonad
+open import Selective.Libraries.Channel
 open import Prelude
-open import Selective.Libraries.Call2
-open import Selective.Libraries.ActiveObjects
 
 open import Debug
 open import Data.Nat.Show using (show)
@@ -36,48 +34,29 @@ CalculateProtocol = record
   ; response = record { channel-shape = ℕ-Reply ; all-tagged = (HasTag _) ∷ [] }
   ; request-tagged = (HasTag+Ref _) ∷ [] }
 
-add-method-header = ResponseMethod ℕ×ℕ→ℕ-ci
-multiply-method-header = ResponseMethod ℕ×ℕ→ℕ-ci
+Calculator : InboxShape
+Calculator = ℕ×ℕ→ℕ-Message ∷ [ ℕ×ℕ→ℕ-Message ]ˡ
 
-calculator-methods : List ActiveMethod
-calculator-methods = add-method-header ∷ multiply-method-header ∷ []
-
-calculator-inbox = methods-shape calculator-methods
-
-calculator-state-vars : ⊤₁ → TypingContext
-calculator-state-vars _ = []
-
-add : (active-method calculator-inbox ⊤₁ calculator-state-vars add-method-header)
-add _ (_ sent Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z  [ lift (n + m)]ᵃ })
-add _ (_ sent Msg (S ()) _) _
-
-multiply : (active-method calculator-inbox ⊤₁ (λ _ → []) multiply-method-header)
-multiply _ (_ sent Msg Z (n ∷ m ∷ [])) v = return₁ (record { new-state = _ ; reply = SendM Z [ lift (n * m)]ᵃ })
-multiply _ (_ sent Msg (S ()) _) _
-
-calculator : ActiveObject
-calculator = record {
-  state-type = ⊤₁
-  ; vars = calculator-state-vars
-  ; methods = calculator-methods
-  ; extra-messages = []
-  ; handlers = add ∷ multiply ∷ []
+calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
+calculator-actor .force = receive ∞>>= λ {
+  (Msg Z (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
+    Z ![t: Z ] (lift tag ∷ [ lift (n + m) ]ᵃ) ∞>> (do
+    strengthen []
+    calculator-actor)
+  ; (Msg (S Z) (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
+    (Z ![t: Z ] (lift tag ∷ ([ lift (n * m) ]ᵃ))) ∞>> (do
+    (strengthen [])
+    calculator-actor)
+  ; (Msg (S (S ())) _)
   }
-
-calculator-actor = run-active-object calculator _
-
 
 TestBox : InboxShape
 TestBox = ℕ-Reply
 
-
--- import Selective.Examples.CalculatorProtocol as CP
--- calculator-test-actor = CP.calculator-test-actor calculator-actor
-
 calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
 calculator-test-actor = do
   spawn∞ calculator-actor
-  Msg Z (_ ∷ n ∷ []) ← call CalculateProtocol (record {
+  let add-request = (record {
     var = Z
     ; chosen-field = Z
     ; fields = lift 32 ∷ [ lift 10 ]ᵃ
@@ -89,9 +68,12 @@ calculator-test-actor = do
         }
       }
     })
+    add-rs = add-request .session .response-session
+  initiate-channel _ add-request
+  Msg Z (_ ∷ n ∷ []) ← from-channel (CalculateProtocol .response) add-rs
     where
       Msg (S ()) _
-  Msg Z (_ ∷ m ∷ []) ← debug (show n) (call CalculateProtocol (record {
+  let mult-request = (record {
     var = Z
     ; chosen-field = Z
     ; fields = lift n ∷ [ lift 10 ]ᵃ
@@ -102,7 +84,9 @@ calculator-test-actor = do
         ; tag = 1
         }
       }
-    }))
+    })
+    mult-rs = add-rs = mult-request .session .response-session
+  Msg Z (_ ∷ m ∷ []) ← from-channel (CalculateProtocol .response) mult-rs
     where
       Msg (S ()) _
   debug (show m) (strengthen [])

@@ -3,49 +3,68 @@ module Selective.Examples.TestCall2 where
 open import Selective.Libraries.Call2
 open import Prelude
 
-AddReplyMessage : MessageType
-AddReplyMessage = ValueType UniqueTag ∷ [ ValueType ℕ ]ˡ
+open import Debug
+open import Data.Nat.Show using (show)
 
-AddReply : InboxShape
-AddReply = [ AddReplyMessage ]ˡ
+ℕ-ReplyMessage : MessageType
+ℕ-ReplyMessage = ValueType UniqueTag ∷ [ ValueType ℕ ]ˡ
 
-AddMessage : MessageType
-AddMessage = ValueType UniqueTag ∷ ReferenceType AddReply ∷ ValueType ℕ ∷ [ ValueType ℕ ]ˡ
+ℕ-Reply : InboxShape
+ℕ-Reply = [ ℕ-ReplyMessage ]ˡ
 
-Calculator : InboxShape
-Calculator = [ AddMessage ]ˡ
+ℕ×ℕ→ℕ-Message : MessageType
+ℕ×ℕ→ℕ-Message = ValueType UniqueTag ∷ ReferenceType ℕ-Reply ∷ ValueType ℕ ∷ [ ValueType ℕ ]ˡ
 
-CalculatorProtocol : ChannelInitiation
-CalculatorProtocol = record
-                       { request = Calculator
+Calculate : InboxShape
+Calculate = [ ℕ×ℕ→ℕ-Message ]ˡ
+
+CalculateProtocol : ChannelInitiation
+CalculateProtocol = record
+                       { request = Calculate
                        ; response = record {
-                         channel-shape = AddReply
+                         channel-shape = ℕ-Reply
                          ; all-tagged = (HasTag _) ∷ []
                          }
                        ; request-tagged = [ HasTag+Ref _ ]ᵃ
                        }
 
-calculatorActor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
-calculatorActor .force = receive ∞>>= λ {
+ℕ×ℕ→ℕ-ci : ChannelInitiation
+ℕ×ℕ→ℕ-ci = record {
+  request = Calculate
+  ; response = record { channel-shape = ℕ-Reply ; all-tagged = (HasTag _) ∷ [] }
+  ; request-tagged = (HasTag+Ref _) ∷ [] }
+
+Calculator : InboxShape
+Calculator = ℕ×ℕ→ℕ-Message ∷ [ ℕ×ℕ→ℕ-Message ]ˡ
+
+calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
+calculator-actor .force = receive ∞>>= λ {
   (Msg Z (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
     Z ![t: Z ] (lift tag ∷ [ lift (n + m) ]ᵃ) ∞>> (do
     strengthen []
-    calculatorActor)
-  ; (Msg (S ()) _)
+    calculator-actor)
+  ; (Msg (S Z) (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
+    (Z ![t: Z ] (lift tag ∷ ([ lift (n * m) ]ᵃ))) ∞>> (do
+    (strengthen [])
+    calculator-actor)
+  ; (Msg (S (S ())) _)
   }
 
 TestBox : InboxShape
-TestBox = AddReply
+TestBox = ℕ-Reply
 
-calltestActor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
-calltestActor = do
-  (spawn∞ calculatorActor)
-  Msg Z (tag ∷ n ∷ []) ← call CalculatorProtocol (record {
+-- import Selective.Examples.CalculatorProtocol as CP
+-- calculator-test-actor = CP.calculator-test-actor calculator-actor
+
+calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+calculator-test-actor = do
+  spawn∞ calculator-actor
+  Msg Z (_ ∷ n ∷ []) ← call CalculateProtocol (record {
     var = Z
     ; chosen-field = Z
-    ; fields = (lift 32) ∷ [ lift 10 ]ᵃ
+    ; fields = lift 32 ∷ [ lift 10 ]ᵃ
     ; session = record {
-      can-request = ⊆-refl
+      can-request = [ Z ]ᵐ -- Pick add method
       ; response-session = record {
         can-receive = [ Z ]ᵐ
         ; tag = 0
@@ -54,6 +73,19 @@ calltestActor = do
     })
     where
       Msg (S ()) _
-  (strengthen [])
-  (return n)
-
+  Msg Z (_ ∷ m ∷ []) ← debug (show n) (call CalculateProtocol (record {
+    var = Z
+    ; chosen-field = Z
+    ; fields = lift n ∷ [ lift 10 ]ᵃ
+    ; session = record {
+      can-request = [ S Z ]ᵐ -- Pick multiply method
+      ; response-session = record {
+        can-receive = [ Z ]ᵐ
+        ; tag = 1
+        }
+      }
+    }))
+    where
+      Msg (S ()) _
+  debug (show m) (strengthen [])
+  return m

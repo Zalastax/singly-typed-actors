@@ -15,12 +15,6 @@ record Stream (i : Size) (A : Set) : Set where
 \begin{code}
 open Stream
 \end{code}
-%<*SkipTwice>
-\begin{code}
-skip-twice : (i : Size) → Stream (↑ (↑ i)) ℕ → Stream i ℕ
-skip-twice i s = s .tail (↑ i) .tail i
-\end{code}
-%</SkipTwice>
 %<*Fib>
 \begin{minipage}{\textwidth}
 \begin{code}
