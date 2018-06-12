@@ -81,14 +81,16 @@ The reference in the second kind of message can be sent two kinds of messages as
 messages containing a single boolean value,
 and messages containing a single string value.
 
-\AgdaCatchGroup{Examples/Types}{ExampleInbox}
+\AgdaCatchGroup{Examples/Types}{ExampleMessages}
+
+\AgdaCatchGroup{Examples/Types}{TestInbox}
 %</InboxShape>
 
 %<*InboxShapeSubtype>
 The Interface Segregation Principle (ISP) is a design principle that states
-that no client should be forced to depend on methods it does not use \parencite{martin2002agile}.
-\textcite{martin2002agile} claims that when clients depend upon objects which
-contain methods used only by other clients, this can lead to fragile code.
+that no client should be forced to depend on methods it does not use;
+when clients depend upon objects which contain methods used only by other clients,
+this can lead to fragile code~\parencite{martin2002agile}.
 In particular, if a client depends on an interface that contains
 methods that the client does not use but others do,
 that client will be affected by changes that those other clients force on the interface.
@@ -132,8 +134,12 @@ are able to prove that the element is a member of the other set.
 
 The drawback of using subsets is that recursive subtypes are not captured,
 but we deem it good enough for our purposes and simple to work with.
-Proving that \AgdaBound{A} \AgdaFunction{<:} \AgdaBound{B} boils down to
+Proving that \mbox{\AgdaBound{A} \AgdaFunction{<:} \AgdaBound{B}} boils down to
 providing an index into \AgdaBound{B} for every element in \AgdaBound{A}.
+For example, \AgdaFunction{text{-}subtyping} proves that an inbox that only accepts
+\AgdaFunction{BoolMessage} is a subtype of the \AgdaFunction{TestInbox} from before.
+
+\AgdaCatchGroup{Examples/Types}{TestInbox}
 
 \AgdaCatchGroup{Examples/Types}{Subtyping}
 %</InboxShapeSubtype>
@@ -165,11 +171,10 @@ We type check references in the standard way of maintaining a variable typing co
 A typing context associates variables to types,
 where variables are commonly referred to by their name.
 Variable names makes expressions easy to understand for humans,
-but pose two annoying problems: α-renaming and α-equivalence.
+but pose two annoying problems: α-equivalence and α-renaming.
 
 α-equivalence is a form of equivalence that captures the intuition that the particular choice of
 a bound variable name does not usually matter \parencite{turbak2008design}.
-
 Renaming the variables of an expression in a way that preserves α-equivalence
 is called α-renaming \parencite{turbak2008design}.
 α-renaming is a part of the general concept of substitution,
@@ -183,7 +188,7 @@ to represent variable binders \parencite{DBLP:journals/entcs/BerghoferU07}.
 A de Bruijn index is a natural number that represents an occurrence of a variable in a λ-term,
 and denotes the number of binders that are in scope between that occurrence
 and its corresponding binder.
-Figure~\ref{fig:debruijn} shows some examples comparing a λ-calculus with names
+Table~\ref{tab:debruijn} shows some examples comparing a λ-calculus with names
 to a λ-calculus using de Bruijn indices.
 
 \input{include/figures/debruijn}
@@ -289,7 +294,9 @@ in the type of the monad,
 making it easy to create indices into the variable context
 without making them a part of the message.
 It would be possible to make the reference field content be an index into the variable context,
-but it would make the model slightly more complicated without making it more powerful.
+but it would make the model slightly more complicated without making it more powerful;
+the programmer can already create indices when they are needed and, since the typing context
+is constantly changing, a specific index is often not valid for long.  
 
 \begin{minipage}{\textwidth}
 \begin{code}

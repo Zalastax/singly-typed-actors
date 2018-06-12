@@ -13,7 +13,7 @@ infixl 1 _>>=_
 \begin{code}
 data MonadParam' (B : Set) : {p q : Set} → p → q → Set₁ where
     return : ∀ {p} → {pre : p} → B → MonadParam' B pre pre
-    _>>=_ : ∀ {A X Y Z} → {pre : X} → {mid : Y} → {post : Z} →
+    _>>=_  : ∀ {A X Y Z} → {pre : X} → {mid : Y} → {post : Z} →
             MonadParam' A pre mid →
             (A → MonadParam' B mid post) →
             MonadParam' B pre post
@@ -23,12 +23,15 @@ data MonadParam' (B : Set) : {p q : Set} → p → q → Set₁ where
 %<*Monad>
 \begin{code}
 data MonadParam (B : Set) : {p q : Set} → p → (B → q) → Set₁ where
-    return : {S : Set} → {post : B → S} → (val : B) →
-                MonadParam B (post val) post
-    _>>=_ : ∀ {A X Y Z} → {pre : X} → {mid : A → Y} → {post : B → Z} →
-                MonadParam A pre mid →
-                ((x : A) → MonadParam B (mid x) post) →
-                MonadParam B pre post
+    return : {S : Set} → {post : B → S} →
+             (val : B) →
+             MonadParam B (post val) post
+    _>>=_  : ∀ {A X Y Z} → {pre : X} →
+             {mid : A → Y} →
+             {post : B → Z} →
+             MonadParam A pre mid →
+             ((x : A) → MonadParam B (mid x) post) →
+             MonadParam B pre post
 \end{code}
 %</Monad>
 

@@ -59,7 +59,7 @@ record ActorRef (InboxType : Set) : Set where
 \end{code}
 %</ActorRef>
 
-%<*ExampleInbox>
+%<*ExampleMessages>
 \begin{code}
 BoolMessage = [ ValueType Bool ]ˡ
 StringMessage = [ ValueType String ]ˡ
@@ -69,12 +69,14 @@ OtherInbox = StringMessage ∷ [ BoolMessage ]ˡ
 
 RefNatMessage : MessageType
 RefNatMessage = ReferenceType OtherInbox ∷ [ ValueType ℕ ]ˡ
-
+\end{code}
+%</ExampleMessages>
+%<*TestInbox>
+\begin{code}
 TestInbox : InboxShape
 TestInbox = RefNatMessage ∷ [ BoolMessage ]ˡ
 \end{code}
-%</ExampleInbox>
-
+%</TestInbox>
 %<*Subtyping>
 \begin{code}
 Boolbox : InboxShape
