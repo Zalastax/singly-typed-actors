@@ -70,19 +70,19 @@ Store = List NamedInbox
 -- Indexing into the store is done by building the peano-number to the index of the element.
 -- To create the successor you have to provide a proof that you're not going past the name
 -- you're looking for.
-data _↦_∈e_ (n : Name) (S : InboxShape) : Store → Set where
+data _↦_∈_ (n : Name) (S : InboxShape) : Store → Set where
   zero : ∀ {xs}
-         → n ↦ S ∈e (inbox# n [ S ] ∷ xs)
+         → n ↦ S ∈ (inbox# n [ S ] ∷ xs)
   suc  : ∀ {n' : Name} { S' xs} {pr : ¬ n ≡ n'}
-         → n ↦ S ∈e xs
-         → n ↦ S ∈e (inbox# n' [ S' ] ∷ xs)
+         → n ↦ S ∈ xs
+         → n ↦ S ∈ (inbox# n' [ S' ] ∷ xs)
 
 
 record _comp↦_∈_ (n : Name) (wanted : InboxShape) (store : Store) : Set₁ where
   constructor [p:_][handles:_]
   field
     {actual} : InboxShape
-    actual-has-pointer : n ↦ actual ∈e store
+    actual-has-pointer : n ↦ actual ∈ store
     actual-handles-wanted : wanted <: actual
 
 Cont : ∀ (i : Size) (IS : InboxShape) {A B : Set₁}
@@ -172,10 +172,10 @@ unname-message (NamedM x fields) = Msg x (do-the-work fields)
     do-the-work {ValueType x₁ ∷ MT} (px ∷ nfc) = px ∷ (do-the-work nfc)
     do-the-work {ReferenceType x₁ ∷ MT} (px ∷ nfc) = _ ∷ do-the-work nfc
 
-data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {name : Name} : (store : Store) → (Inboxes store) → (name ↦ inbox-shape ∈e store) → Set₁ where
+data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {name : Name} : (store : Store) → (Inboxes store) → (name ↦ inbox-shape ∈ store) → Set₁ where
   zero : ∀ {store} {inbs : Inboxes store} →
          InboxForPointer inbox (inbox# name [ inbox-shape ] ∷ store) (inbox ∷ inbs) zero
-  suc : ∀ {n' : Name} {S' inb' store} {p : name ↦ inbox-shape ∈e store} {inbs : Inboxes store} {pr : ¬ name ≡ n'} →
+  suc : ∀ {n' : Name} {S' inb' store} {p : name ↦ inbox-shape ∈ store} {inbs : Inboxes store} {pr : ¬ name ≡ n'} →
         InboxForPointer inbox store inbs p →
         InboxForPointer inbox (inbox# n' [ S' ] ∷ store) (inb' ∷ inbs) (suc {pr = pr} p)
 
@@ -185,7 +185,7 @@ data InboxForPointer {inbox-shape : InboxShape} (inbox : Inbox inbox-shape) {nam
 has-inbox : Store → Actor → Set
 has-inbox store actor =
   let open Actor
-  in actor .name ↦ actor .inbox-shape ∈e store
+  in actor .name ↦ actor .inbox-shape ∈ store
 
 
 inbox-for-actor : ∀ {store} (inbs : Inboxes store) (actor : Actor) (p : has-inbox store actor) (inb : Inbox (Actor.inbox-shape actor)) → Set₁
@@ -254,7 +254,7 @@ record NameSupply (store : Store) : Set₁ where
   field
     name : Name
     freshness-carrier : All (λ v → NamedInbox.name v < name) store
-    name-is-fresh : {n : Name} {IS : InboxShape} → n ↦ IS ∈e store → ¬ n ≡ name
+    name-is-fresh : {n : Name} {IS : InboxShape} → n ↦ IS ∈ store → ¬ n ≡ name
 
 open NameSupply
 
@@ -270,7 +270,7 @@ record NameSupplyStream (i : Size) (store : Store) : Set₁ where
 -- helps show that all the names in the store are still valid if we add a new name on top,
 -- if the new name is > than all the names already in the store.
 suc-helper : ∀ {store name IS n} →
-             name ↦ IS ∈e store →
+             name ↦ IS ∈ store →
              All (λ v → suc (NamedInbox.name v) ≤ n) store →
              ¬ name ≡ n
 suc-helper zero (px ∷ p) = <-¬≡ px

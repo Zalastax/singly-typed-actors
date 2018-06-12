@@ -189,7 +189,7 @@ record UpdatedInbox (store : Store) {store' : Store} (original : Inboxes store')
   field
     updated-inboxes : Inboxes store'
     inboxes-valid : InboxesValid store updated-inboxes
-    others-unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈e store'} → InboxForPointer inb store' original p' → InboxForPointer inb store' updated-inboxes p'
+    others-unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈ store'} → InboxForPointer inb store' original p' → InboxForPointer inb store' updated-inboxes p'
 
 
 open ValidMessageList
@@ -209,7 +209,7 @@ update-inbox : {name : Name} → {IS : InboxShape} →
   {store' : Store} →
   (inboxes : Inboxes store') →
   (InboxesValid store inboxes) →
-  (name ↦ IS ∈e store') →
+  (name ↦ IS ∈ store') →
   (f : InboxUpdater store IS) →
   UpdatedInbox store inboxes name
 update-inbox _ _ [] () _
@@ -217,14 +217,14 @@ update-inbox {name} store {store'} (x ∷ inboxes) (px ∷ proofs) zero f =
   record { updated-inboxes = inbox updated ∷ inboxes ; inboxes-valid = (valid updated) ∷ proofs ; others-unaffected = unaffected }
   where
     updated = (f (record { inbox = x ; valid = px }))
-    unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈e store'} → InboxForPointer inb store' (x ∷ inboxes) p' → InboxForPointer inb store' (inbox updated ∷ inboxes) p'
+    unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈ store'} → InboxForPointer inb store' (x ∷ inboxes) p' → InboxForPointer inb store' (inbox updated ∷ inboxes) p'
     unaffected pr zero = ⊥-elim (pr refl)
     unaffected pr (suc ifp) = suc ifp
 update-inbox {name} store {store'} (x ∷ inboxes) (px ∷ proofs) (suc p) f =
   record { updated-inboxes = x ∷ updated-inboxes updated ; inboxes-valid = px ∷ inboxes-valid updated ; others-unaffected = unaffected }
   where
     updated = (update-inbox store inboxes proofs p f)
-    unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈e store'} → InboxForPointer inb store' (x ∷ inboxes) p' → InboxForPointer inb store' (x ∷ updated-inboxes updated) p'
+    unaffected : ∀ {name' IS' inb} → ¬ name ≡ name' → {p' : name' ↦ IS' ∈ store'} → InboxForPointer inb store' (x ∷ inboxes) p' → InboxForPointer inb store' (x ∷ updated-inboxes updated) p'
     unaffected pr  zero = zero
     unaffected pr (suc ifp) = suc (others-unaffected updated pr ifp)
 
@@ -316,7 +316,7 @@ add-top {IS} {A} {post} m env = record
 
 
 
-record GetInbox (store : Store) {store' : Store} (inboxes : Inboxes store') {name : Name} {S : InboxShape} (p : name ↦ S ∈e store') : Set₂ where
+record GetInbox (store : Store) {store' : Store} (inboxes : Inboxes store') {name : Name} {S : InboxShape} (p : name ↦ S ∈ store') : Set₂ where
   field
     messages : Inbox S
     valid : all-messages-valid store messages
@@ -324,10 +324,10 @@ record GetInbox (store : Store) {store' : Store} (inboxes : Inboxes store') {nam
 
 -- Get the messages of an inbox pointed to in the environment.
 -- This is just a simple lookup into the list of inboxes.
-get-inbox : ∀ {name IS} → (env : Env) → (p : name ↦ IS ∈e (store env)) → GetInbox (env .store) (env .env-inboxes) p
+get-inbox : ∀ {name IS} → (env : Env) → (p : name ↦ IS ∈ (store env)) → GetInbox (env .store) (env .env-inboxes) p
 get-inbox env point = loop (env-inboxes env) (messages-valid env) point
   where
-    loop : {store store' : Store} → (inbs : Inboxes store') → InboxesValid store inbs → ∀ {name IS} → (p : name ↦ IS ∈e store') → GetInbox store inbs p
+    loop : {store store' : Store} → (inbs : Inboxes store') → InboxesValid store inbs → ∀ {name IS} → (p : name ↦ IS ∈ store') → GetInbox store inbs p
     loop _ [] ()
     loop (x ∷ _) (px ∷ _) zero = record { messages = x ; valid = px ; right-inbox = zero }
     loop (_ ∷ inbs) (_ ∷ inb-valid) (suc point) =
@@ -392,7 +392,7 @@ unblock-actors {store} {original} {n} updated (x ∷ blckd) (v ∷ blckd-valid) 
       blocked-unaffected (BlockedReceive x p y) = BlockedReceive x p (others-unaffected updated ¬p y)
       blocked-unaffected (BlockedSelective x p a b c) = BlockedSelective x p a (others-unaffected updated ¬p b) c
 
-update-inbox-env : ∀ {name IS} → (env : Env) → name ↦ IS ∈e (store env) →
+update-inbox-env : ∀ {name IS} → (env : Env) → name ↦ IS ∈ (store env) →
                  (f : ValidMessageList (store env) IS → ValidMessageList (store env) IS) → Env
 update-inbox-env {name} {IS} env p f =
   let
@@ -432,7 +432,7 @@ open _comp↦_∈_
 open FoundReference
 
 -- Extract the found pointer
-underlying-pointer : ∀ {IS store} → (ref : FoundReference store IS) → (name ref ↦ actual (reference ref) ∈e store )
+underlying-pointer : ∀ {IS store} → (ref : FoundReference store IS) → (name ref ↦ actual (reference ref) ∈ store )
 underlying-pointer ref = actual-has-pointer (reference ref)
 
 translate-message-pointer : ∀ {ToIS A store} →
