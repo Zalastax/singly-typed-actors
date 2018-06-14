@@ -127,8 +127,8 @@ An alternative approach is to build subsets as a \emph{view} \parencite{DBLP:jou
 of the lists in question.
 A view is a data type that reveals something interesting about its indices, \eg that a list is a subset of another.
 To define \AgdaDatatype{⊆} we state that the empty list (\AgdaInductiveConstructor{[]}) is a subset of all lists,
-and we state that you can add an element to a subset (\AgdaInductiveConstructor{∷}) if you
-are able to prove that the element is a member of the other set.
+an if you are able to prove that an element is a member of a set,
+we state that you can add (\AgdaInductiveConstructor{∷}) that element to a subset of the set.
 
 \AgdaCatchGroup{Membership}{Subset}
 
@@ -160,7 +160,7 @@ This encoding is intuitive and simple, but it does not capture $S <: T$, nor doe
 Using this encoding thus requires finding a way to maintain additional proofs.
 
 To maintain the necessary proofs of references being valid requires that we encode more things in the type system.
-The solution that seem to fit best in the setting of Agda is to make a bigger distinction between references and values.
+The solution that seems to fit best in the setting of Agda is to make a bigger distinction between references and values.
 Values are kept as normal Agda terms, only restricted under Agda's usual typing rules.
 References, on the other hand, are treated as variables that are maintained explicitly in the model,
 encoded in the type parameter of each actor.
@@ -170,7 +170,7 @@ as long as the effect every actor operation has on the reference variables is ca
 We type check references in the standard way of maintaining a variable typing context.
 A typing context associates variables to types,
 where variables are commonly referred to by their name.
-Variable names makes expressions easy to understand for humans,
+Variable names make expressions easy to understand for humans,
 but pose two annoying problems: α-equivalence and α-renaming.
 
 α-equivalence is a form of equivalence that captures the intuition that the particular choice of
@@ -243,7 +243,7 @@ which we explore in chapter~\ref{chap:selective_receive}.
 %</ReferenceSubtype>
 
 %<*Messages>
-Messages in \ourlang are made up of a tag, indicating the type of the message,
+A message in \ourlang is made up of a tag, indicating the type of the message,
 and instantiations of the fields in that message type.
 We have made the unusual decision to give outgoing and incoming messages slightly different shapes.
 This choice is purely for ease of implementation and does not affect the power of the model.
