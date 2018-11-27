@@ -153,7 +153,7 @@ seller = begin do
     select-decision (Msg (S Z) _) = true
     select-decision _ = false
     wait-for-decision : ∀ {i Γ} →
-                        ∞ActorM i SellerInterface (Lift AgreeChoice) Γ (λ _ → Γ)
+                        ∞ActorM i SellerInterface (Lift (lsuc lzero) AgreeChoice) Γ (λ _ → Γ)
     wait-for-decision = do
       record { msg = Msg (S Z) (ac ∷ []) } ← (selective-receive select-decision)
         where
@@ -165,7 +165,7 @@ seller = begin do
     select-contribution-from _ _ = false
     wait-for-money-from : ∀ {i Γ} →
                           BuyerRole →
-                          ∞ActorM i SellerInterface (Lift Contribution) Γ (λ _ → Γ)
+                          ∞ActorM i SellerInterface (Lift (lsuc lzero) Contribution) Γ (λ _ → Γ)
     wait-for-money-from br = do
       record { msg = Msg (S (S Z)) (_ ∷ contribution ∷ []) } ← (selective-receive (select-contribution-from br))
         where
@@ -232,7 +232,7 @@ buyer1 = begin do
                Γ ⊢ Buyer1-to-Seller →
                UniqueTag →
                BookTitle →
-               ∞ActorM i Buyer1Interface (Lift (Maybe Book)) Γ (λ _ → Γ)
+               ∞ActorM i Buyer1Interface (Lift (lsuc lzero) (Maybe Book)) Γ (λ _ → Γ)
     get-quote p tag title = do
       record { msg = Msg (S (S Z)) (_ ∷ book ∷ []) ; msg-ok = msg-ok } ← call p Z tag [ lift title ]ᵃ [ S (S Z) ]ᵐ Z
         where
@@ -251,7 +251,7 @@ buyer1 = begin do
     select-decision (Msg (S (S (S Z))) _) = true
     select-decision _ = false
     wait-for-decision : ∀ {i Γ} →
-                        ∞ActorM i Buyer1Interface (Lift AgreeChoice) Γ (λ _ → Γ)
+                        ∞ActorM i Buyer1Interface (Lift (lsuc lzero) AgreeChoice) Γ (λ _ → Γ)
     wait-for-decision = do
       record {msg = Msg (S (S (S Z))) (ac ∷ []) } ← (selective-receive select-decision)
         where
@@ -296,7 +296,7 @@ buyer2 = begin do
     select-contribution : MessageFilter Buyer2Interface
     select-contribution (Msg (S (S Z)) _) = true
     select-contribution _ = false
-    wait-for-contribution : ∀ {i Γ} → ∞ActorM i Buyer2Interface (Lift Contribution) Γ (λ _ → Γ)
+    wait-for-contribution : ∀ {i Γ} → ∞ActorM i Buyer2Interface (Lift (lsuc lzero) Contribution) Γ (λ _ → Γ)
     wait-for-contribution = do
       record { msg = Msg (S (S Z)) (cc ∷ []) } ← (selective-receive select-contribution)
         where

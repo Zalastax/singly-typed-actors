@@ -54,12 +54,12 @@ pingMainActor : (i : Size) (A : Set₁) → Set₂
 pingMainActor i A = ∞ActorM i Pingbox A PingRefs constPingrefs
 
 mutual
-  pingReceive : ∀ {i} (msg : Message Pingbox) → ∞ActorM i Pingbox (Lift Bool) (add-references PingRefs msg) constPingrefs
+  pingReceive : ∀ {i} (msg : Message Pingbox) → ∞ActorM i Pingbox (Lift (lsuc lzero) Bool) (add-references PingRefs msg) constPingrefs
   pingReceive (Msg Z (b ∷ [])) = return b
   pingReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPingValue
   pingReceive (Msg (S (S ())) x₁)
 
-  loopTillPingValue : ∀ {i} → pingMainActor i (Lift Bool)
+  loopTillPingValue : ∀ {i} → pingMainActor i (Lift (lsuc lzero) Bool)
   loopTillPingValue .force = receive ∞>>= pingReceive
 
 pinger : ∀ {i} → ∞ActorM (↑ i) Pingbox ⊤₁ [] constPingrefs
@@ -83,11 +83,11 @@ pongMainActor : (i : Size) (A : Set₁) → Set₂
 pongMainActor i A = ∞ActorM i Pongbox A PongRefs constPongrefs
 
 mutual
-  pongReceive : ∀ {i} (msg : Message Pongbox) → ∞ActorM i Pongbox (Lift ℕ) (add-references PongRefs msg) constPongrefs
+  pongReceive : ∀ {i} (msg : Message Pongbox) → ∞ActorM i Pongbox (Lift (lsuc lzero) ℕ) (add-references PongRefs msg) constPongrefs
   pongReceive (Msg Z (n ∷ [])) = return n
   pongReceive (Msg (S Z) _) = strengthen [ S Z ]ᵐ >> loopTillPongValue
   pongReceive (Msg (S (S ())) _)
-  loopTillPongValue : ∀ {i} → pongMainActor i (Lift ℕ)
+  loopTillPongValue : ∀ {i} → pongMainActor i (Lift (lsuc lzero) ℕ)
   loopTillPongValue .force = receive ∞>>= pongReceive
 
 ponger : ∀ {i} → ∞ActorM (↑ i) Pongbox ⊤₁ [] constPongrefs

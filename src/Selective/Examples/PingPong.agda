@@ -20,10 +20,10 @@ Spawnbox : InboxShape
 Spawnbox = []
 
 ℕ₁ : Set₁
-ℕ₁ = Lift ℕ
+ℕ₁ = Lift (lsuc lzero) ℕ
 
 Bool₁ : Set₁
-Bool₁ = Lift Bool
+Bool₁ = Lift (lsuc lzero) Bool
 
 mutual
   PingValues = [ Bool ]ˡ

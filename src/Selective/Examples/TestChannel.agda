@@ -37,7 +37,7 @@ CalculateProtocol = record
 Calculator : InboxShape
 Calculator = ℕ×ℕ→ℕ-Message ∷ [ ℕ×ℕ→ℕ-Message ]ˡ
 
-calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
+calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift (lsuc lzero) ⊤) [] (λ _ → [])
 calculator-actor .force = receive ∞>>= λ {
   (Msg Z (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
     Z ![t: Z ] (lift tag ∷ [ lift (n + m) ]ᵃ) ∞>> (do
@@ -53,7 +53,7 @@ calculator-actor .force = receive ∞>>= λ {
 TestBox : InboxShape
 TestBox = ℕ-Reply
 
-calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift (lsuc lzero) ℕ) [] (λ _ → [])
 calculator-test-actor = do
   spawn∞ calculator-actor
   let add-request = (record {

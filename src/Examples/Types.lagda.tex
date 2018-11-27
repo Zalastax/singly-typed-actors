@@ -116,13 +116,13 @@ h = identity' {Bool}
 %</ImplicitIdentity>
 %<*Lift>
 \begin{code}
-record Lift {a ℓ} (A : Set a) : Set (a ⊔ ℓ) where
+record Lift {a} ℓ (A : Set a) : Set (a ⊔ ℓ) where
   constructor lift
   field lower : A
 \end{code}
 %</Lift>
 %<*LiftBool>
 \begin{code}
-Bool₁ = Lift {lzero} {lsuc lzero} Bool
+Bool₁ = Lift (lsuc lzero) Bool
 \end{code}
 %</LiftBool>

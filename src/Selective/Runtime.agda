@@ -4,7 +4,7 @@ open import Selective.SimulationEnvironment
 open import Prelude
 
 open import Data.Nat.Show using (show)
-open import Coinduction using ( ♯_ ; ♭)
+open import Codata.Musical.Notation using ( ♯_ ; ♭)
 import IO
 open ∞Trace
 

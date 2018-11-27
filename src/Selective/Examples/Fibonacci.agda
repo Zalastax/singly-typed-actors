@@ -81,7 +81,7 @@ client = wait-for-server ∞>> run 10 0
         record { msg = (Msg Z _) ; msg-ok = msg-ok } → return tt
         ; record { msg = (Msg (S _) _) ; msg-ok = () }
         }
-    wait-for-value : ∀ {i} → ∞ActorM i ClientInterface (Lift ℕ) ClientRefs constClientRefs
+    wait-for-value : ∀ {i} → ∞ActorM i ClientInterface (Lift (lsuc lzero) ℕ) ClientRefs constClientRefs
     wait-for-value = do
       record { msg = Msg (S Z) (n ∷ []) } ← selective-receive (λ {
         (Msg Z _) → false

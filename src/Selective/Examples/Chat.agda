@@ -6,6 +6,7 @@ open import Prelude
   hiding (Maybe)
 open import Data.Maybe as Maybe
   hiding (map)
+open import Data.Maybe.Categorical as CMaybe
 
 open import Data.List.Properties
 open import Category.Monad
@@ -246,8 +247,8 @@ lookup-room rms name =
     loop [] [] = nothing
     loop [] (x ∷ xs) with (x ≟ name)
     ... | (yes p) = just Z
-    ... | (no _) = RawMonad._>>=_ Maybe.monad (loop [] xs) λ p → just (S p)
-    loop (x ∷ Γ) rl = RawMonad._>>=_ Maybe.monad (loop Γ rl) (λ p → just (S p))
+    ... | (no _) = RawMonad._>>=_ CMaybe.monad (loop [] xs) λ p → just (S p)
+    loop (x ∷ Γ) rl = RawMonad._>>=_ CMaybe.monad (loop Γ rl) (λ p → just (S p))
 
 room-manager : ∀ {i} → ActorM i RoomManagerInterface RoomManagerState [] rms-to-context
 room-manager = begin (loop (record { rooms = [] }))
@@ -355,7 +356,7 @@ client-create-room : ∀ {i } →
                      Γ ⊢ RoomManagerInterface →
                      UniqueTag →
                      RoomName →
-                     ∞ActorM i ClientInterface (Lift CreateRoomResult) Γ (λ _ → Γ)
+                     ∞ActorM i ClientInterface (Lift (lsuc lzero) CreateRoomResult) Γ (λ _ → Γ)
 client-create-room p tag name = do
   record { msg = (Msg (S Z) (_ ∷ cr ∷ [])) } ← (call p (S Z) tag [ lift name ]ᵃ [ S Z ]ᵐ Z)
     where
@@ -364,7 +365,7 @@ client-create-room p tag name = do
   return cr
 
 add-if-join-success : TypingContext →
-                      Lift {lzero} {lsuc lzero} JoinRoomStatus →
+                      Lift (lsuc lzero) JoinRoomStatus →
                       TypingContext
 add-if-join-success Γ (lift (JRS-SUCCESS x)) = Client-to-Room ∷ Γ
 add-if-join-success Γ (lift (JRS-FAIL x)) = Γ
@@ -374,7 +375,7 @@ client-join-room : ∀ {i Γ} →
                    UniqueTag →
                    RoomName →
                    ClientName →
-                   ∞ActorM i ClientInterface (Lift JoinRoomStatus) Γ (add-if-join-success Γ)
+                   ∞ActorM i ClientInterface (Lift (lsuc lzero) JoinRoomStatus) Γ (add-if-join-success Γ)
 client-join-room p tag room-name client-name = do
     self
     S p ![t: Z ] (lift tag ∷ (([ Z ]>: ⊆-suc (⊆-suc (⊆-suc ⊆-refl))) ∷ (lift room-name) ∷ [ lift client-name ]ᵃ))
@@ -391,7 +392,7 @@ client-join-room p tag room-name client-name = do
     select-join-reply tag (Msg (S (S (S (S (S Z))))) x₁) = false
     select-join-reply tag (Msg (S (S (S (S (S (S ())))))) _)
     handle-message : ∀ {tag i Γ} → (m : SelectedMessage (select-join-reply tag)) →
-                     ∞ActorM i ClientInterface (Lift JoinRoomStatus)
+                     ∞ActorM i ClientInterface (Lift (lsuc lzero) JoinRoomStatus)
                        (add-selected-references Γ m) (add-if-join-success Γ)
     handle-message record { msg = (Msg Z _) ; msg-ok = () }
     handle-message record { msg = (Msg (S Z) _) ; msg-ok = () }
@@ -409,7 +410,7 @@ client-send-message : ∀ {i  Γ} →
 client-send-message p client-name message = p ![t: Z ] [ lift (chat-from client-name message: message) ]ᵃ
 
 client-receive-message : ∀ {i Γ} →
-                         ∞ActorM i ClientInterface (Lift ChatMessageContent) Γ (λ _ → Γ)
+                         ∞ActorM i ClientInterface (Lift (lsuc lzero) ChatMessageContent) Γ (λ _ → Γ)
 client-receive-message = do
     m ← (selective-receive select-message)
     handle-message m
@@ -418,7 +419,7 @@ client-receive-message = do
     select-message (Msg (S (S (S (S (S Z))))) _) = true
     select-message (Msg _ _) = false
     handle-message : ∀ {i Γ} → (m : SelectedMessage select-message) →
-                     ∞ActorM i ClientInterface (Lift ChatMessageContent) (add-selected-references Γ m) (λ _ → Γ)
+                     ∞ActorM i ClientInterface (Lift (lsuc lzero) ChatMessageContent) (add-selected-references Γ m) (λ _ → Γ)
     handle-message record { msg = (Msg Z _) ; msg-ok = () }
     handle-message record { msg = (Msg (S Z) _) ; msg-ok = () }
     handle-message record { msg = (Msg (S (S Z)) _) ; msg-ok = () }

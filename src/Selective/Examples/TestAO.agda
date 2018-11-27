@@ -74,7 +74,7 @@ TestBox = ℕ-Reply
 -- import Selective.Examples.CalculatorProtocol as CP
 -- calculator-test-actor = CP.calculator-test-actor calculator-actor
 
-calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift (lsuc lzero) ℕ) [] (λ _ → [])
 calculator-test-actor = do
   spawn∞ calculator-actor
   Msg Z (_ ∷ n ∷ []) ← call CalculateProtocol (record {

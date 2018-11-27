@@ -41,8 +41,8 @@ TestBox : InboxShape
 TestBox = ℕ-Reply
 
 calculator-test-actor : ∀{i} →
-  ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → []) →
-  ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+  ∞ActorM (↑ i) Calculator (Lift (lsuc lzero) ⊤) [] (λ _ → []) →
+  ∞ActorM i TestBox (Lift (lsuc lzero) ℕ) [] (λ _ → [])
 calculator-test-actor calculator-actor = do
   spawn∞ calculator-actor
   Msg Z (_ ∷ n ∷ []) ← call CalculateProtocol (record {

@@ -265,7 +265,7 @@ The type of the selected reference variable must be compatible with the type tha
 \begin{minipage}{\textwidth}
 \begin{code}
 send-field-content : TypingContext → MessageField → Set₁
-send-field-content Γ (ValueType A) = Lift A
+send-field-content Γ (ValueType A) = Lift (lsuc lzero) A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 \end{code}
 \end{minipage}
@@ -336,7 +336,7 @@ add-references Γ (Msg {MT} x x₁) = extract-references MT ++ Γ
 \begin{code}
 infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 ⊤₁ : Set₁
-⊤₁ = Lift ⊤
+⊤₁ = Lift (lsuc lzero) ⊤
 \end{code}
 %<*ActorMonadHeader>
 \begin{code}
@@ -418,7 +418,7 @@ return₁ val .force = Return val
 
 -- universe lifting for return₁
 return : {A : Set} → ∀ {i IS post} → (val : A) →
-         ∞ActorM i IS (Lift A) (post (lift val)) post
+         ∞ActorM i IS (Lift (lsuc lzero) A) (post (lift val)) post
 return val = return₁ (lift val)
 
 _>>=_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre mid) →

@@ -27,7 +27,7 @@ record _⊢>:_ (Γ : TypingContext) (requested : InboxShape) : Set₁ where
       actual-handles-requested : requested <: actual
 
 send-field-content : TypingContext → MessageField → Set₁
-send-field-content Γ (ValueType A) = Lift A
+send-field-content Γ (ValueType A) = Lift (lsuc lzero) A
 send-field-content Γ (ReferenceType requested) = Γ ⊢>: requested
 
 data SendMessage (To : InboxShape) (Γ : TypingContext) : Set₁ where
@@ -76,7 +76,7 @@ add-selected-references Γ m = add-references Γ (SelectedMessage.msg m)
 
     
 ⊤₁ : Set₁
-⊤₁ = Lift ⊤
+⊤₁ = Lift (lsuc lzero) ⊤
 
 infixl 1 _∞>>=_ _>>=_ _∞>>_ _>>_
 
@@ -132,7 +132,7 @@ return₁ : {A : Set (lsuc lzero)} → ∀ {i IS post} → (val : A) → ∞Acto
 return₁ val .force = Return val
 
 -- universe lifting for return₁
-return : {A : Set} → ∀ {i IS post} → (val : A) → ∞ActorM i IS (Lift A) (post (lift val)) post
+return : {A : Set} → ∀ {i IS post} → (val : A) → ∞ActorM i IS (Lift (lsuc lzero) A) (post (lift val)) post
 return val = return₁ (lift val)
 
 _>>=_ : ∀ {i IS A B pre mid post} → (m : ∞ActorM i IS A pre mid) →

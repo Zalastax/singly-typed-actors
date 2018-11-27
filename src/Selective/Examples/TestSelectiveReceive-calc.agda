@@ -24,7 +24,7 @@ Calculate = [ ℕ×ℕ→ℕ-Message ]ˡ
 Calculator : InboxShape
 Calculator = ℕ×ℕ→ℕ-Message ∷ [ ℕ×ℕ→ℕ-Message ]ˡ
 
-calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift ⊤) [] (λ _ → [])
+calculator-actor : ∀ {i} → ∞ActorM (↑ i) Calculator (Lift (lsuc lzero) ⊤) [] (λ _ → [])
 calculator-actor .force = receive ∞>>= λ {
   (Msg Z (tag ∷ _ ∷ n ∷ m ∷ [])) .force →
     Z ![t: Z ] (lift tag ∷ [ lift (n + m) ]ᵃ) ∞>> (do
@@ -44,7 +44,7 @@ accept-tagged-ℕ : UniqueTag → MessageFilter TestBox
 accept-tagged-ℕ tag (Msg Z (tag' ∷ _)) = ⌊ tag ≟ tag' ⌋
 accept-tagged-ℕ tag (Msg (S ()) _)
 
-calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift ℕ) [] (λ _ → [])
+calculator-test-actor : ∀{i} → ∞ActorM i TestBox (Lift (lsuc lzero) ℕ) [] (λ _ → [])
 calculator-test-actor = do
   spawn∞ calculator-actor
   self

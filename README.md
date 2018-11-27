@@ -9,14 +9,14 @@ in a style inspired by Effects from Idris and Koen Claessen's Poor Man's Concurr
 
 
 | Dependency       | Version                                  |
-|------------------|------------------------------------------|
-| Agda             | 2.5.4 |
-| standard-library | 2ff655cc3b6632ee0e3a52319360177b65ef59ce |
+|------------------|---------|
+| Agda             | 2.5.4.2 |
+| standard-library | v0.17   |
 
 ## How to build?
 You can follow [Agda's installation guide](http://agda.readthedocs.io/en/latest/getting-started/installation.html)
 or build from source.
-My preferred way is to to clone the repo, checkout the release-2.5.4 branch and run
+My preferred way is to to clone the repo, checkout the release-2.5.4.2 branch and run
 `stack install --stack-yaml stack-8.2.2.yaml`.
 
 The project itself can be built with make or using agda-mode in emacs.
